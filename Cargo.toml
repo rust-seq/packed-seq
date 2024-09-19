@@ -1,0 +1,11 @@
+[package]
+name = "packed-seq"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+epserde = "0.6.1"
+wide = "0.7.28"
+
+[dev-dependencies]
+rand = "0.8.5"
