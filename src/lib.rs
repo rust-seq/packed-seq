@@ -40,12 +40,12 @@ pub trait Seq: Copy {
 
     /// A simple iterator over characters.
     /// Returns u8 values in [0, 4).
-    fn iter_bp(&self) -> impl ExactSizeIterator<Item = u8>;
+    fn iter_bp(self) -> impl ExactSizeIterator<Item = u8>;
 
     /// An iterator that splits the input into 8 chunks and streams over them in parallel.
     /// Returns a separate `tail` iterator over the remaining characters.
     /// The context can be e.g. the k-mer size being iterated. When `context>1`, consecutive chunk overlap by `context-1` bases.
-    fn par_iter_bp(&self, context: usize) -> (impl ExactSizeIterator<Item = S>, Self);
+    fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S>, Self);
 }
 
 /// A `&[u8]` should contain values in `0..4`.
@@ -71,12 +71,12 @@ impl<'s> Seq for &'s [u8] {
     }
 
     #[inline(always)]
-    fn iter_bp(&self) -> impl ExactSizeIterator<Item = u8> {
+    fn iter_bp(self) -> impl ExactSizeIterator<Item = u8> {
         self.iter().copied()
     }
 
     #[inline(always)]
-    fn par_iter_bp(&self, context: usize) -> (impl ExactSizeIterator<Item = S>, Self) {
+    fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S>, Self) {
         let num_kmers = self.len().saturating_sub(context - 1);
         let n = num_kmers / L;
 
@@ -164,7 +164,7 @@ impl<'s> Seq for PackedSeq<'s> {
     }
 
     #[inline(always)]
-    fn iter_bp(&self) -> impl ExactSizeIterator<Item = u8> {
+    fn iter_bp(self) -> impl ExactSizeIterator<Item = u8> {
         assert!(self.len <= self.seq.len() * 4);
 
         let this = self.normalize();
@@ -183,7 +183,7 @@ impl<'s> Seq for PackedSeq<'s> {
     }
 
     #[inline(always)]
-    fn par_iter_bp(&self, context: usize) -> (impl ExactSizeIterator<Item = S>, Self) {
+    fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S>, Self) {
         #[cfg(target_endian = "big")]
         panic!("Big endian architectures are not supported.");
 
