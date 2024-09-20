@@ -1,3 +1,13 @@
+//! Types and traits for 2-bit packed size-4 (DNA) alphabets.
+//!
+//! What this library does:
+//! - Allowing APIs to take an `impl Seq` type that provides a `iter_bp` function to iterate all bases in the sequence as `u8` values in `0..4`.
+//! - Providing `OwnedPackedSeq` storage of packed sequence and `PackedSeq` slices over packed data.
+//! - Efficiently converting from ASCII representation to `OwnedPackedSeq`.
+//!
+//! What this library does not:
+//! - Handling non-ACGT characters.
+
 mod intrinsics;
 
 use core::{array::from_fn, mem::transmute};
@@ -24,7 +34,7 @@ pub trait Seq: Copy {
     fn to_word(&self) -> usize;
 
     /// Get a sub-slice of the sequence.
-    fn sub_slice(&self, idx: usize, len: usize) -> Self;
+    fn slice(&self, range: Range<usize>) -> Self;
 
     /// A simple iterator over characters.
     /// Returns u8 values in [0, 4).
@@ -32,10 +42,12 @@ pub trait Seq: Copy {
 
     /// An iterator that splits the input into 8 chunks and streams over them in parallel.
     /// Returns a separate `tail` iterator over the remaining characters.
-    /// k is the k-mer size being iterated. When k>1, consecutive chunk overlap by k-1 characters.
-    fn par_iter_bp(&self, k: usize) -> (impl ExactSizeIterator<Item = S>, Self);
+    /// The context can be e.g. the k-mer size being iterated. When `context>1`, consecutive chunk overlap by `context-1` bases.
+    fn par_iter_bp(&self, context: usize) -> (impl ExactSizeIterator<Item = S>, Self);
 }
 
+/// A `&[u8]` should contain values in `0..4`.
+/// ASCII input must first be converted, so `OwnedPackedSeq::from_ascii`.
 impl<'s> Seq for &'s [u8] {
     const BASES_PER_BYTE: usize = 1;
 
@@ -52,8 +64,8 @@ impl<'s> Seq for &'s [u8] {
     }
 
     #[inline(always)]
-    fn sub_slice(&self, idx: usize, len: usize) -> Self {
-        &self[idx..idx + len]
+    fn slice(&self, range: Range<usize>) -> Self {
+        &self[range]
     }
 
     #[inline(always)]
@@ -62,8 +74,8 @@ impl<'s> Seq for &'s [u8] {
     }
 
     #[inline(always)]
-    fn par_iter_bp(&self, k: usize) -> (impl ExactSizeIterator<Item = S>, Self) {
-        let num_kmers = self.len().saturating_sub(k - 1);
+    fn par_iter_bp(&self, context: usize) -> (impl ExactSizeIterator<Item = S>, Self) {
+        let num_kmers = self.len().saturating_sub(context - 1);
         let n = num_kmers / L;
 
         let base_ptr = self.as_ptr();
@@ -72,7 +84,7 @@ impl<'s> Seq for &'s [u8] {
         let mut upcoming_1 = S::ZERO;
         let mut upcoming_2 = S::ZERO;
 
-        let it = (0..if num_kmers == 0 { 0 } else { n + k - 1 }).map(move |i| {
+        let it = (0..if num_kmers == 0 { 0 } else { n + context - 1 }).map(move |i| {
             if i % 4 == 0 {
                 if i % 8 == 0 {
                     // Read a u64 containing the next 8 characters.
@@ -139,12 +151,12 @@ impl<'s> Seq for PackedSeq<'s> {
     }
 
     #[inline(always)]
-    fn sub_slice(&self, idx: usize, len: usize) -> Self {
-        assert!(idx + len <= self.len);
+    fn slice(&self, range: Range<usize>) -> Self {
+        assert!(range.end <= self.len);
         PackedSeq {
             seq: self.seq,
-            offset: self.offset + idx,
-            len,
+            offset: self.offset + range.start,
+            len: range.end - range.start,
         }
         .normalize()
     }
@@ -169,7 +181,7 @@ impl<'s> Seq for PackedSeq<'s> {
     }
 
     #[inline(always)]
-    fn par_iter_bp(&self, k: usize) -> (impl ExactSizeIterator<Item = S>, Self) {
+    fn par_iter_bp(&self, context: usize) -> (impl ExactSizeIterator<Item = S>, Self) {
         #[cfg(target_endian = "big")]
         panic!("Big endian architectures are not supported.");
 
@@ -180,7 +192,7 @@ impl<'s> Seq for PackedSeq<'s> {
             "Non-byte offsets are not yet supported."
         );
 
-        let num_kmers = this.len.saturating_sub(k - 1);
+        let num_kmers = this.len.saturating_sub(context - 1);
         let n = (num_kmers / L) / 4 * 4;
         let bytes_per_chunk = n / 4;
 
@@ -190,7 +202,7 @@ impl<'s> Seq for PackedSeq<'s> {
         let mut upcoming_1 = S::ZERO;
         let mut upcoming_2 = S::ZERO;
 
-        let it = (0..if num_kmers == 0 { 0 } else { n + k - 1 }).map(move |i| {
+        let it = (0..if num_kmers == 0 { 0 } else { n + context - 1 }).map(move |i| {
             if i % 16 == 0 {
                 if i % 32 == 0 {
                     // Read a u64 containing the next 8 characters.
@@ -224,19 +236,38 @@ impl<'s> Seq for PackedSeq<'s> {
 }
 
 impl OwnedPackedSeq {
-    pub fn new(seq: &[u8]) -> Self {
+    /// Create an `OwnedPackedSeq` from an ASCII sequence.
+    /// `Aa` map to `0`, `Cc` to `1`, `Gg` to `2`, and `Tt` to `3`.
+    /// Panics on any other character.
+    ///
+    /// Uses the BMI2 `pext` instruction when available, based on the
+    /// `n_to_bits_pext` method described at
+    /// https://github.com/Daniel-Liu-c0deb0t/cute-nucleotides.
+    ///
+    /// TODO: Optimize for non-BMI2 platforms.
+    #[cfg(target_endian = "little")]
+    pub fn from_ascii(seq: &[u8]) -> Self {
         let mut packed_vec = Self {
             seq: vec![],
             len: 0,
         };
-        let last = seq.len() / 8 * 8;
-        for i in (0..last).step_by(8) {
-            let chunk = &seq[i..i + 8].try_into().unwrap();
-            let word = u64::from_ne_bytes(*chunk);
-            let packed_byte = unsafe { std::arch::x86_64::_pext_u64(word, 0x0606060606060606) };
-            packed_vec.seq.push(packed_byte as u8);
-            packed_vec.seq.push((packed_byte >> 8) as u8);
-            packed_vec.len += 8;
+
+        #[allow(unused)]
+        let mut last = 0;
+
+        #[cfg(all(target_arch = "x86_64", target_feature = "bmi2"))]
+        {
+            last = seq.len() / 8 * 8;
+
+            for i in (0..last).step_by(8) {
+                let chunk = &seq[i..i + 8].try_into().unwrap();
+                let ascii = u64::from_ne_bytes(*chunk);
+                let packed_bytes =
+                    unsafe { std::arch::x86_64::_pext_u64(ascii, 0x0606060606060606) };
+                packed_vec.seq.push(packed_bytes as u8);
+                packed_vec.seq.push((packed_bytes >> 8) as u8);
+                packed_vec.len += 8;
+            }
         }
 
         let mut packed_byte = 0;
@@ -244,8 +275,8 @@ impl OwnedPackedSeq {
             packed_byte |= match base {
                 b'a' | b'A' => 0,
                 b'c' | b'C' => 1,
-                b'g' | b'G' => 3,
-                b't' | b'T' => 2,
+                b'g' | b'G' => 2,
+                b't' | b'T' => 3,
                 b'\r' | b'\n' => continue,
                 _ => panic!(),
             } << (packed_vec.len * 2);
@@ -263,25 +294,30 @@ impl OwnedPackedSeq {
 }
 
 pub trait OwnedSeq: Default + Sync + SerializeInner + DeserializeInner {
-    type BpSlice<'a>: Seq
-    where
-        Self: 'a;
-
-    fn push(&mut self, seq: Self::BpSlice<'_>) -> Range<usize>;
-    fn concat<'a>(input_seqs: impl Iterator<Item = Self::BpSlice<'a>>) -> (Self, Vec<Range<usize>>)
-    where
-        Self: Sized + 'a;
-    fn get(&self) -> Self::BpSlice<'_>;
-    fn slice(&self, range: Range<usize>) -> Self::BpSlice<'_>;
-    fn size(&self) -> usize;
+    type Seq<'s>: Seq;
+    fn as_slice(&self) -> Self::Seq<'_>;
+    /// Append the given sequence to the underlying storage.
+    /// This may leave gaps (padding) between consecutively pushed sequences to avoid re-aligning the pushed data.
+    /// Returns the range of indices corresponding to the pushed sequence.
+    /// Use `self.as_slice()[range]` to get the corresponding slice.
+    fn push_seq(&mut self, seq: Self::Seq<'_>) -> Range<usize>;
+    fn from_seqs<'a>(input_seqs: impl Iterator<Item = Self::Seq<'a>>) -> (Self, Vec<Range<usize>>) {
+        let mut seq = Self::default();
+        let ranges = input_seqs.map(|slice| seq.push_seq(slice)).collect();
+        (seq, ranges)
+    }
     #[cfg(test)]
     fn random(n: usize, alphabet: usize) -> Self;
 }
 
 impl OwnedSeq for Vec<u8> {
-    type BpSlice<'a> = &'a [u8];
+    type Seq<'s> = &'s [u8];
 
-    fn push(&mut self, seq: Self::BpSlice<'_>) -> Range<usize> {
+    fn as_slice(&self) -> Self::Seq<'_> {
+        self.as_slice()
+    }
+
+    fn push_seq(&mut self, seq: &[u8]) -> Range<usize> {
         let start = seq.len();
         let end = start + Seq::len(&seq);
         let range = start..end;
@@ -289,30 +325,6 @@ impl OwnedSeq for Vec<u8> {
         range
     }
 
-    fn concat<'a>(
-        input_seqs: impl Iterator<Item = Self::BpSlice<'a>>,
-    ) -> (Self, Vec<Range<usize>>) {
-        let mut seq = vec![];
-        let ranges = input_seqs
-            .map(|slice| {
-                let start = seq.len();
-                let end = start + Seq::len(&slice);
-                let range = start..end;
-                seq.extend(slice);
-                range
-            })
-            .collect();
-        (seq, ranges)
-    }
-    fn get(&self) -> Self::BpSlice<'_> {
-        &*self
-    }
-    fn slice(&self, range: Range<usize>) -> Self::BpSlice<'_> {
-        &self[range]
-    }
-    fn size(&self) -> usize {
-        size_of_val(self.as_slice())
-    }
     #[cfg(test)]
     fn random(n: usize, alphabet: usize) -> Self {
         (0..n)
@@ -328,44 +340,25 @@ pub struct OwnedPackedSeq {
 }
 
 impl OwnedSeq for OwnedPackedSeq {
-    type BpSlice<'a> = PackedSeq<'a>;
+    type Seq<'s> = PackedSeq<'s>;
 
-    fn push<'a>(&mut self, seq: Self::BpSlice<'a>) -> Range<usize> {
-        let start = 4 * self.seq.len() + seq.offset;
-        let end = start + Seq::len(&seq);
-        let range = start..end;
-        self.seq.extend(seq.seq);
-        self.len = 4 * self.seq.len();
-        range
-    }
-    fn concat<'a>(
-        input_seqs: impl Iterator<Item = Self::BpSlice<'a>>,
-    ) -> (Self, Vec<Range<usize>>) {
-        let mut packed_vec = OwnedPackedSeq {
-            len: 0,
-            seq: vec![],
-        };
-        let ranges = input_seqs.map(|slice| packed_vec.push(slice)).collect();
-        (packed_vec, ranges)
-    }
-    fn get(&self) -> Self::BpSlice<'_> {
+    fn as_slice(&self) -> Self::Seq<'_> {
         PackedSeq {
             seq: &self.seq,
             offset: 0,
             len: self.len,
         }
     }
-    fn slice(&self, range: Range<usize>) -> Self::BpSlice<'_> {
-        PackedSeq {
-            seq: &self.seq,
-            offset: range.start,
-            len: range.len(),
-        }
-        .normalize()
+
+    fn push_seq<'a>(&mut self, seq: PackedSeq<'_>) -> Range<usize> {
+        let start = 4 * self.seq.len() + seq.offset;
+        let end = start + seq.len();
+        let range = start..end;
+        self.seq.extend(seq.seq);
+        self.len = 4 * self.seq.len();
+        range
     }
-    fn size(&self) -> usize {
-        size_of_val(self.seq.as_slice())
-    }
+
     #[cfg(test)]
     fn random(n: usize, alphabet: usize) -> Self {
         assert!(alphabet == 4);
