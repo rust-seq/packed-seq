@@ -248,7 +248,7 @@ impl OwnedPackedSeq {
     }
 
     /// Push an ASCII sequence to an `OwnedPackedSeq`.
-    /// `Aa` map to `0`, `Cc` to `1`, `Gg` to `2`, and `Tt` to `3`.
+    /// `Aa` map to `0`, `Cc` to `1`, `Gg` to `3`, and `Tt` to `2`.
     /// Panics on any other character.
     ///
     /// Uses the BMI2 `pext` instruction when available, based on the
@@ -284,11 +284,10 @@ impl OwnedPackedSeq {
             packed_byte |= match base {
                 b'a' | b'A' => 0,
                 b'c' | b'C' => 1,
-                b'g' | b'G' => 2,
-                b't' | b'T' => 3,
-                b'\r' | b'\n' => continue,
+                b'g' | b'G' => 3,
+                b't' | b'T' => 2,
                 _ => panic!(),
-            } << (self.len * 2);
+            } << ((self.len % 4) * 2);
             self.len += 1;
             if self.len % 4 == 0 {
                 self.seq.push(packed_byte);
@@ -384,5 +383,47 @@ impl OwnedSeq for OwnedPackedSeq {
 
         let seq = (0..n.div_ceil(4)).map(|_| rand::random::<u8>()).collect();
         OwnedPackedSeq { seq, len: n }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn pack_naive(seq: &[u8]) -> (Vec<u8>, usize) {
+        let mut packed_byte = 0;
+        let mut packed_len = 0;
+        let mut packed = vec![];
+        for &base in seq {
+            packed_byte |= match base {
+                b'a' | b'A' => 0,
+                b'c' | b'C' => 1,
+                b'g' | b'G' => 3,
+                b't' | b'T' => 2,
+                _ => panic!(),
+            } << ((packed_len % 4) * 2);
+            packed_len += 1;
+            if packed_len % 4 == 0 {
+                packed.push(packed_byte);
+                packed_byte = 0;
+            }
+        }
+        if packed_len % 4 != 0 {
+            packed.push(packed_byte);
+        }
+        (packed, packed_len)
+    }
+
+    #[test]
+    fn pack() {
+        for n in 0..=128 {
+            let seq: Vec<_> = (0..n)
+                .map(|_| b"ACGTacgt"[rand::random::<u8>() as usize % 8])
+                .collect();
+            let (packed_1, len1) = pack_naive(&seq);
+            let packed_2 = OwnedPackedSeq::from_ascii(&seq);
+            assert_eq!(len1, packed_2.len);
+            assert_eq!(packed_1, packed_2.seq);
+        }
     }
 }
