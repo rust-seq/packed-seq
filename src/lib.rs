@@ -317,7 +317,6 @@ pub trait OwnedSeq: Default + Sync + SerializeInner + DeserializeInner {
         (seq, ranges)
     }
 
-    #[cfg(test)]
     fn random(n: usize, alphabet: usize) -> Self;
 }
 
@@ -336,7 +335,6 @@ impl OwnedSeq for Vec<u8> {
         range
     }
 
-    #[cfg(test)]
     fn random(n: usize, alphabet: usize) -> Self {
         (0..n)
             .map(|_| ((rand::random::<u8>() as usize) % alphabet) as u8)
@@ -370,9 +368,9 @@ impl OwnedSeq for OwnedPackedSeq {
         range
     }
 
-    #[cfg(test)]
     fn random(n: usize, alphabet: usize) -> Self {
         assert!(alphabet == 4);
+
         let seq = (0..n.div_ceil(4)).map(|_| rand::random::<u8>()).collect();
         OwnedPackedSeq { seq, len: n }
     }
