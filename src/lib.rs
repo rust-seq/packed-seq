@@ -15,8 +15,10 @@ use epserde::{deser::DeserializeInner, ser::SerializeInner, Epserde};
 use std::ops::Range;
 use wide::u64x4;
 
-pub(crate) use wide::u32x8 as S;
-pub(crate) const L: usize = 8;
+/// A SIMD vector containing 8 u32s.
+pub use wide::u32x8 as S;
+/// The number of lanes in `S`.
+pub const L: usize = 8;
 
 /// Interface to sequences over a 2-bit alphabet.
 ///
