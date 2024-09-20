@@ -149,7 +149,9 @@ impl<'s> Seq for PackedSeq<'s> {
     fn to_word(&self) -> usize {
         assert!(self.len() <= usize::BITS as usize / 2 - 3);
         let mask = usize::MAX >> (64 - 2 * self.len());
-        unsafe { (*(self.seq.as_ptr() as *const usize) >> (2 * self.offset)) & mask }
+        unsafe {
+            ((self.seq.as_ptr() as *const usize).read_unaligned() >> (2 * self.offset)) & mask
+        }
     }
 
     #[inline(always)]
