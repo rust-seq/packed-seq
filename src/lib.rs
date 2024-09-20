@@ -297,17 +297,26 @@ impl OwnedPackedSeq {
 
 pub trait OwnedSeq: Default + Sync + SerializeInner + DeserializeInner {
     type Seq<'s>: Seq;
+
     fn as_slice(&self) -> Self::Seq<'_>;
+
+    /// Get a sub-slice of the sequence.
+    fn slice(&self, range: Range<usize>) -> Self::Seq<'_> {
+        self.as_slice().slice(range)
+    }
+
     /// Append the given sequence to the underlying storage.
     /// This may leave gaps (padding) between consecutively pushed sequences to avoid re-aligning the pushed data.
     /// Returns the range of indices corresponding to the pushed sequence.
     /// Use `self.as_slice()[range]` to get the corresponding slice.
     fn push_seq(&mut self, seq: Self::Seq<'_>) -> Range<usize>;
+
     fn from_seqs<'a>(input_seqs: impl Iterator<Item = Self::Seq<'a>>) -> (Self, Vec<Range<usize>>) {
         let mut seq = Self::default();
         let ranges = input_seqs.map(|slice| seq.push_seq(slice)).collect();
         (seq, ranges)
     }
+
     #[cfg(test)]
     fn random(n: usize, alphabet: usize) -> Self;
 }
