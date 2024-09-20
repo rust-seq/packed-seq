@@ -255,7 +255,10 @@ impl OwnedPackedSeq {
     ///
     /// TODO: Optimize for non-BMI2 platforms.
     #[cfg(target_endian = "little")]
-    pub fn push_ascii(&mut self, seq: &[u8]) {
+    pub fn push_ascii(&mut self, seq: &[u8]) -> Range<usize> {
+        let start = 4 * self.seq.len();
+        let len = seq.len();
+
         #[allow(unused)]
         let mut last = 0;
 
@@ -293,6 +296,7 @@ impl OwnedPackedSeq {
         if self.len % 4 != 0 {
             self.seq.push(packed_byte);
         }
+        start..start + len
     }
 }
 
@@ -304,6 +308,11 @@ pub trait OwnedSeq: Default + Sync + SerializeInner + DeserializeInner {
     /// Get a sub-slice of the sequence.
     fn slice(&self, range: Range<usize>) -> Self::Seq<'_> {
         self.as_slice().slice(range)
+    }
+
+    /// The length of the sequence in bp.
+    fn len(&self) -> usize {
+        self.as_slice().len()
     }
 
     /// Append the given sequence to the underlying storage.
@@ -363,10 +372,9 @@ impl OwnedSeq for OwnedPackedSeq {
     fn push_seq<'a>(&mut self, seq: PackedSeq<'_>) -> Range<usize> {
         let start = 4 * self.seq.len() + seq.offset;
         let end = start + seq.len();
-        let range = start..end;
         self.seq.extend(seq.seq);
         self.len = 4 * self.seq.len();
-        range
+        start..end
     }
 
     fn random(n: usize, alphabet: usize) -> Self {
