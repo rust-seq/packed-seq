@@ -238,7 +238,14 @@ impl<'s> Seq for PackedSeq<'s> {
 }
 
 impl OwnedPackedSeq {
-    /// Create an `OwnedPackedSeq` from an ASCII sequence.
+    /// Create an `OwnedPackedSeq` from an ASCII sequence. See `push_ascii` for details.
+    pub fn from_ascii(seq: &[u8]) -> Self {
+        let mut packed_vec = Self::default();
+        packed_vec.push_ascii(seq);
+        packed_vec
+    }
+
+    /// Push an ASCII sequence to an `OwnedPackedSeq`.
     /// `Aa` map to `0`, `Cc` to `1`, `Gg` to `2`, and `Tt` to `3`.
     /// Panics on any other character.
     ///
@@ -248,12 +255,7 @@ impl OwnedPackedSeq {
     ///
     /// TODO: Optimize for non-BMI2 platforms.
     #[cfg(target_endian = "little")]
-    pub fn from_ascii(seq: &[u8]) -> Self {
-        let mut packed_vec = Self {
-            seq: vec![],
-            len: 0,
-        };
-
+    pub fn push_ascii(&mut self, seq: &[u8]) {
         #[allow(unused)]
         let mut last = 0;
 
@@ -266,9 +268,9 @@ impl OwnedPackedSeq {
                 let ascii = u64::from_ne_bytes(*chunk);
                 let packed_bytes =
                     unsafe { std::arch::x86_64::_pext_u64(ascii, 0x0606060606060606) };
-                packed_vec.seq.push(packed_bytes as u8);
-                packed_vec.seq.push((packed_bytes >> 8) as u8);
-                packed_vec.len += 8;
+                self.seq.push(packed_bytes as u8);
+                self.seq.push((packed_bytes >> 8) as u8);
+                self.len += 8;
             }
         }
 
@@ -281,17 +283,16 @@ impl OwnedPackedSeq {
                 b't' | b'T' => 3,
                 b'\r' | b'\n' => continue,
                 _ => panic!(),
-            } << (packed_vec.len * 2);
-            packed_vec.len += 1;
-            if packed_vec.len % 4 == 0 {
-                packed_vec.seq.push(packed_byte);
+            } << (self.len * 2);
+            self.len += 1;
+            if self.len % 4 == 0 {
+                self.seq.push(packed_byte);
                 packed_byte = 0;
             }
         }
-        if packed_vec.len % 4 != 0 {
-            packed_vec.seq.push(packed_byte);
+        if self.len % 4 != 0 {
+            self.seq.push(packed_byte);
         }
-        packed_vec
     }
 }
 
