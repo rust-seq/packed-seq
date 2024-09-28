@@ -17,7 +17,7 @@ mod intrinsics;
 
 use core::{array::from_fn, mem::transmute};
 use epserde::{deser::DeserializeInner, ser::SerializeInner, Epserde};
-use std::ops::Range;
+use std::ops::{Deref, Range};
 use wide::u64x4;
 
 /// A SIMD vector containing 8 u32s.
@@ -52,11 +52,19 @@ pub trait Seq: Copy {
     fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S>, Self);
 }
 
-/// TODO: Should this be a strong type instead? (`pub struct AsciiSeq<'s>(&'s [u8]);`)
 /// A `&[u8]` representing an ASCII sequence.
 /// Only supported characters are `ACGTacgt`.
-/// Other characters will be silently mapped into `[0, 4)`.
-pub type AsciiSeq<'s> = &'s [u8];
+/// Other characters will be silently mapped into `[0, 4)`, or may cause panics.
+#[derive(Copy, Clone, Debug)]
+pub struct AsciiSeq<'s>(pub &'s [u8]);
+
+/// An owned ASCII sequence.
+/// Only supported characters are `ACGTacgt`.
+/// Other characters will be silently mapped into `[0, 4)`, or may cause panics.
+///
+/// TODO: Should this be a strong type instead?
+#[derive(Clone, Debug, Default, Epserde)]
+pub struct AsciiSeqVec(pub Vec<u8>);
 
 /// Maps ASCII to `[0, 4)` on the fly.
 /// Prefer first packing into a `PackedSeqVec` for storage.
@@ -65,7 +73,7 @@ impl<'s> Seq for AsciiSeq<'s> {
 
     #[inline(always)]
     fn len(&self) -> usize {
-        (self as &[u8]).len()
+        self.0.len()
     }
 
     #[inline(always)]
@@ -83,7 +91,7 @@ impl<'s> Seq for AsciiSeq<'s> {
             head = len / 8 * 8;
 
             for i in (0..head).step_by(8) {
-                let chunk = &self[i..i + 8].try_into().unwrap();
+                let chunk = &self.0[i..i + 8].try_into().unwrap();
                 let ascii = u64::from_ne_bytes(*chunk);
                 let packed_bytes =
                     unsafe { std::arch::x86_64::_pext_u64(ascii, 0x0606060606060606) };
@@ -91,7 +99,7 @@ impl<'s> Seq for AsciiSeq<'s> {
             }
         }
 
-        for (i, &base) in self.iter().enumerate().skip(head) {
+        for (i, &base) in self.0.iter().enumerate().skip(head) {
             val |= match base {
                 b'a' | b'A' => 0,
                 b'c' | b'C' => 1,
@@ -105,7 +113,7 @@ impl<'s> Seq for AsciiSeq<'s> {
 
     #[inline(always)]
     fn slice(&self, range: Range<usize>) -> Self {
-        &self[range]
+        Self(&self.0[range])
     }
 
     /// Iterate the basepairs in the sequence, assuming values in `0..4`.
@@ -119,13 +127,13 @@ impl<'s> Seq for AsciiSeq<'s> {
             (0..self.len()).map(move |i| {
                 if i % 8 == 0 {
                     if i <= self.len() - 8 {
-                        let chunk: &[u8; 8] = &self[i..i + 8].try_into().unwrap();
+                        let chunk: &[u8; 8] = &self.0[i..i + 8].try_into().unwrap();
                         let ascii = u64::from_ne_bytes(*chunk);
                         cache = unsafe { std::arch::x86_64::_pext_u64(ascii, 0x0606060606060606) };
                     } else {
                         let mut chunk: [u8; 8] = [0; 8];
                         // Copy only part of the slice to avoid out-of-bounds indexing.
-                        chunk[..self.len() - i].copy_from_slice(self[i..].try_into().unwrap());
+                        chunk[..self.len() - i].copy_from_slice(self.0[i..].try_into().unwrap());
                         let ascii = u64::from_ne_bytes(chunk);
                         cache = unsafe { std::arch::x86_64::_pext_u64(ascii, 0x0606060606060606) };
                     }
@@ -152,7 +160,7 @@ impl<'s> Seq for AsciiSeq<'s> {
         let num_kmers = self.len().saturating_sub(context - 1);
         let n = num_kmers / L;
 
-        let base_ptr = self.as_ptr();
+        let base_ptr = self.0.as_ptr();
         let offsets_lanes_0_4: u64x4 = from_fn(|l| (l * n) as u64).into();
         let offsets_lanes_4_8: u64x4 = from_fn(|l| ((4 + l) * n) as u64).into();
         let mut upcoming_1 = S::ZERO;
@@ -186,7 +194,7 @@ impl<'s> Seq for AsciiSeq<'s> {
             chars
         });
 
-        (it, &self[L * n..])
+        (it, Self(&self.0[L * n..]))
     }
 }
 
@@ -411,25 +419,27 @@ pub trait SeqVec: Default + Sync + SerializeInner + DeserializeInner {
     fn random(n: usize) -> Self;
 }
 
-impl SeqVec for Vec<u8> {
+impl SeqVec for AsciiSeqVec {
     type Seq<'s> = AsciiSeq<'s>;
 
     fn as_slice(&self) -> Self::Seq<'_> {
-        self.as_slice()
+        AsciiSeq(self.0.as_slice())
     }
 
-    fn push_seq(&mut self, seq: &[u8]) -> Range<usize> {
+    fn push_seq(&mut self, seq: AsciiSeq) -> Range<usize> {
         let start = seq.len();
-        let end = start + Seq::len(&seq);
+        let end = start + seq.len();
         let range = start..end;
-        self.extend(seq);
+        self.0.extend(seq.0);
         range
     }
 
     fn random(n: usize) -> Self {
-        (0..n)
-            .map(|_| b"ACGT"[rand::random::<u8>() as usize])
-            .collect()
+        Self(
+            (0..n)
+                .map(|_| b"ACGT"[rand::random::<u8>() as usize % 4])
+                .collect(),
+        )
     }
 }
 
