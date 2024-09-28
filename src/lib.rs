@@ -32,6 +32,7 @@ pub const L: usize = 8;
 /// `PackedSeq` type that contains packed sequences.
 pub trait Seq: Copy {
     const BASES_PER_BYTE: usize;
+    type SeqVec: SeqVec;
 
     /// The length of the sequence in bp.
     fn len(&self) -> usize;
@@ -39,6 +40,9 @@ pub trait Seq: Copy {
     /// Convert a short sequence (kmer) to a packed word.
     /// Panics if `self` is longer than 29 characters.
     fn to_word(&self) -> usize;
+
+    /// Convert to an owned version.
+    fn to_vec(&self) -> Self::SeqVec;
 
     /// Get a sub-slice of the sequence.
     fn slice(&self, range: Range<usize>) -> Self;
@@ -56,7 +60,7 @@ pub trait Seq: Copy {
 /// A `&[u8]` representing an ASCII sequence.
 /// Only supported characters are `ACGTacgt`.
 /// Other characters will be silently mapped into `[0, 4)`, or may cause panics.
-#[derive(Copy, Clone, Debug, MemSize, MemDbg)]
+#[derive(Copy, Clone, Debug, MemSize, MemDbg, PartialEq, Eq)]
 pub struct AsciiSeq<'s>(pub &'s [u8]);
 
 /// An owned ASCII sequence.
@@ -71,6 +75,7 @@ pub struct AsciiSeqVec(pub Vec<u8>);
 /// Prefer first packing into a `PackedSeqVec` for storage.
 impl<'s> Seq for AsciiSeq<'s> {
     const BASES_PER_BYTE: usize = 1;
+    type SeqVec = AsciiSeqVec;
 
     #[inline(always)]
     fn len(&self) -> usize {
@@ -119,6 +124,11 @@ impl<'s> Seq for AsciiSeq<'s> {
         }
 
         val as usize
+    }
+
+    /// Convert to an owned version.
+    fn to_vec(&self) -> AsciiSeqVec {
+        AsciiSeqVec(self.0.to_vec())
     }
 
     #[inline(always)]
@@ -235,6 +245,7 @@ impl<'s> PackedSeq<'s> {
 
 impl<'s> Seq for PackedSeq<'s> {
     const BASES_PER_BYTE: usize = 4;
+    type SeqVec = PackedSeqVec;
 
     #[inline(always)]
     fn len(&self) -> usize {
@@ -247,6 +258,15 @@ impl<'s> Seq for PackedSeq<'s> {
         let mask = usize::MAX >> (64 - 2 * self.len());
         unsafe {
             ((self.seq.as_ptr() as *const usize).read_unaligned() >> (2 * self.offset)) & mask
+        }
+    }
+
+    /// Convert to an owned version.
+    fn to_vec(&self) -> PackedSeqVec {
+        assert_eq!(self.offset, 0);
+        PackedSeqVec {
+            seq: self.seq.to_vec(),
+            len: self.len,
         }
     }
 
