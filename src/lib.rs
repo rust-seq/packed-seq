@@ -7,6 +7,11 @@
 //!
 //! What this library does not:
 //! - Handling non-ACGT characters.
+//!
+//! TODO: Currently this relies on the `pext` instruction for good performance on `x86`.
+//!       Alternatively, the multiplication trick from [1] should be implemented.
+//!
+//! 1: https://github.com/Daniel-Liu-c0deb0t/cute-nucleotides/blob/master/src/n_to_bits.rs#L213
 
 mod intrinsics;
 
@@ -47,23 +52,20 @@ pub trait Seq: Copy {
     fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S>, Self);
 }
 
+/// TODO: Should this be a strong type instead? (`pub struct AsciiSeq<'s>(&'s [u8]);`)
+/// A `&[u8]` representing an ASCII sequence.
+/// Only supported characters are `ACGTacgt`.
+/// Other characters will be silently mapped into `[0, 4)`.
 pub type AsciiSeq<'s> = &'s [u8];
 
-/// A `&[u8]`.
-/// To iterate bases, ASCII input must first be converted via `PackedSeqVec::from_ascii`.
-impl<'s> Seq for &'s [u8] {
+/// Maps ASCII to `[0, 4)` on the fly.
+/// Prefer first packing into a `PackedSeqVec` for storage.
+impl<'s> Seq for AsciiSeq<'s> {
     const BASES_PER_BYTE: usize = 1;
 
     #[inline(always)]
     fn len(&self) -> usize {
         (self as &[u8]).len()
-    }
-
-    #[inline(always)]
-    fn to_word(&self) -> usize {
-        assert!(self.len() <= usize::BITS as usize / 8);
-        let mask = usize::MAX >> (64 - 8 * self.len());
-        unsafe { *(self.as_ptr() as *const usize) & mask }
     }
 
     #[inline(always)]
@@ -107,9 +109,41 @@ impl<'s> Seq for &'s [u8] {
     }
 
     /// Iterate the basepairs in the sequence, assuming values in `0..4`.
+    ///
+    /// NOTE: This is only efficient on x86_64 with `BMI2` support for `pext`.
     #[inline(always)]
     fn iter_bp(self) -> impl ExactSizeIterator<Item = u8> {
-        self.iter().copied()
+        #[cfg(all(target_arch = "x86_64", target_feature = "bmi2"))]
+        {
+            let mut cache = 0;
+            (0..self.len()).map(move |i| {
+                if i % 8 == 0 {
+                    if i <= self.len() - 8 {
+                        let chunk: &[u8; 8] = &self[i..i + 8].try_into().unwrap();
+                        let ascii = u64::from_ne_bytes(*chunk);
+                        cache = unsafe { std::arch::x86_64::_pext_u64(ascii, 0x0606060606060606) };
+                    } else {
+                        let mut chunk: [u8; 8] = [0; 8];
+                        // Copy only part of the slice to avoid out-of-bounds indexing.
+                        chunk[..self.len() - i].copy_from_slice(self[i..].try_into().unwrap());
+                        let ascii = u64::from_ne_bytes(chunk);
+                        cache = unsafe { std::arch::x86_64::_pext_u64(ascii, 0x0606060606060606) };
+                    }
+                }
+                let base = cache & 0x03;
+                cache >>= 2;
+                base as u8
+            })
+        }
+
+        #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2")))]
+        self.iter().map(|base| match base {
+            b'a' | b'A' => 0,
+            b'c' | b'C' => 1,
+            b'g' | b'G' => 3,
+            b't' | b'T' => 2,
+            _ => panic!(),
+        })
     }
 
     /// Iterate the basepairs in the sequence in 8 parallel streams, assuming values in `0..4`.
@@ -134,6 +168,12 @@ impl<'s> Seq for &'s [u8] {
                     let u64_4_8: S = unsafe { transmute(intrinsics::gather(base_ptr, idx_4_8)) };
                     // Split into two vecs containing a u32 of 4 characters each.
                     (upcoming_1, upcoming_2) = intrinsics::deinterleave(u64_0_4, u64_4_8);
+                    // TODO: Use packing to avoid needing two vectors?
+                    let mask = 0x06060606;
+                    upcoming_1 &= S::splat(mask);
+                    upcoming_2 &= S::splat(mask);
+                    upcoming_1 = upcoming_1 >> S::splat(1);
+                    upcoming_2 = upcoming_2 >> S::splat(1);
                 } else {
                     // Move on to the next u32 containing 4 buffered characters.
                     upcoming_1 = upcoming_2;
@@ -287,13 +327,15 @@ impl PackedSeqVec {
 
     /// Push an ASCII sequence to an `PackedSeqVec`.
     /// `Aa` map to `0`, `Cc` to `1`, `Gg` to `3`, and `Tt` to `2`.
-    /// Panics on any other character.
+    /// Other characters may be silently mapped into `[0, 4)` or panick.
+    /// (TODO: Explicitly support different conversions.)
     ///
     /// Uses the BMI2 `pext` instruction when available, based on the
     /// `n_to_bits_pext` method described at
     /// https://github.com/Daniel-Liu-c0deb0t/cute-nucleotides.
     ///
     /// TODO: Optimize for non-BMI2 platforms.
+    /// TODO: Support multiple ways of dealing with non-`ACGT` characters.
     #[cfg(target_endian = "little")]
     pub fn push_ascii(&mut self, seq: &[u8]) -> Range<usize> {
         let start = 4 * self.seq.len();
@@ -370,7 +412,7 @@ pub trait SeqVec: Default + Sync + SerializeInner + DeserializeInner {
 }
 
 impl SeqVec for Vec<u8> {
-    type Seq<'s> = &'s [u8];
+    type Seq<'s> = AsciiSeq<'s>;
 
     fn as_slice(&self) -> Self::Seq<'_> {
         self.as_slice()
