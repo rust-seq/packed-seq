@@ -30,15 +30,9 @@ pub trait Seq: Copy {
     /// The length of the sequence in bp.
     fn len(&self) -> usize;
 
-    /// Convert a short sequence (kmer) to a single underlying word.
-    /// Only use the result for kmer-identity; the value depends on the input representation, and no
-    /// This does no additional packing, so for `&[u8]` it can only contain up to 8 characters.
-    /// Panics if the sequence is too long.
-    fn to_word(&self) -> usize;
-
     /// Convert a short sequence (kmer) to a packed word.
-    /// Panics is `self` is longer than 32 characters.
-    fn to_packed_word(&self) -> usize;
+    /// Panics if `self` is longer than 29 characters.
+    fn to_word(&self) -> usize;
 
     /// Get a sub-slice of the sequence.
     fn slice(&self, range: Range<usize>) -> Self;
@@ -73,7 +67,7 @@ impl<'s> Seq for &'s [u8] {
     }
 
     #[inline(always)]
-    fn to_packed_word(&self) -> usize {
+    fn to_word(&self) -> usize {
         let len = self.len();
         assert!(len <= usize::BITS as usize / 2);
 
@@ -196,11 +190,6 @@ impl<'s> Seq for PackedSeq<'s> {
         unsafe {
             ((self.seq.as_ptr() as *const usize).read_unaligned() >> (2 * self.offset)) & mask
         }
-    }
-
-    #[inline(always)]
-    fn to_packed_word(&self) -> usize {
-        self.to_word()
     }
 
     #[inline(always)]
@@ -480,14 +469,14 @@ mod test {
     fn pack_word() {
         let packed = PackedSeqVec::from_ascii(b"ACGTACGTACGTACGTACGTACGTACGT");
         let slice = packed.slice(0..4);
-        assert_eq!(slice.to_packed_word(), 0b10110100);
+        assert_eq!(slice.to_word(), 0b10110100);
         let slice = packed.slice(0..8);
-        assert_eq!(slice.to_packed_word(), 0b1011010010110100);
+        assert_eq!(slice.to_word(), 0b1011010010110100);
         let slice = packed.slice(0..16);
-        assert_eq!(slice.to_packed_word(), 0b10110100101101001011010010110100);
+        assert_eq!(slice.to_word(), 0b10110100101101001011010010110100);
         let slice = packed.slice(0..28);
         assert_eq!(
-            slice.to_packed_word(),
+            slice.to_word(),
             0b10110100101101001011010010110100101101001011010010110100
         );
     }
