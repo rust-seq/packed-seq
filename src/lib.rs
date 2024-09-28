@@ -31,9 +31,14 @@ pub trait Seq: Copy {
     fn len(&self) -> usize;
 
     /// Convert a short sequence (kmer) to a single underlying word.
-    /// Note that this does no additional packing, so for `&[u8]` it can only contain up to 8 characters.
+    /// Only use the result for kmer-identity; the value depends on the input representation, and no
+    /// This does no additional packing, so for `&[u8]` it can only contain up to 8 characters.
     /// Panics if the sequence is too long.
     fn to_word(&self) -> usize;
+
+    /// Convert a short sequence (kmer) to a packed word.
+    /// Panics is `self` is longer than 32 characters.
+    fn to_packed_word(&self) -> usize;
 
     /// Get a sub-slice of the sequence.
     fn slice(&self, range: Range<usize>) -> Self;
@@ -48,8 +53,10 @@ pub trait Seq: Copy {
     fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S>, Self);
 }
 
-/// A `&[u8]` should contain values in `0..4`.
-/// ASCII input must first be converted, so `OwnedPackedSeq::from_ascii`.
+pub type AsciiSeq<'s> = &'s [u8];
+
+/// A `&[u8]`.
+/// To iterate bases, ASCII input must first be converted via `PackedSeqVec::from_ascii`.
 impl<'s> Seq for &'s [u8] {
     const BASES_PER_BYTE: usize = 1;
 
@@ -66,15 +73,52 @@ impl<'s> Seq for &'s [u8] {
     }
 
     #[inline(always)]
+    fn to_packed_word(&self) -> usize {
+        let len = self.len();
+        assert!(len <= usize::BITS as usize / 2);
+
+        let mut val = 0u64;
+
+        #[allow(unused)]
+        let mut head = 0;
+
+        #[cfg(all(target_arch = "x86_64", target_feature = "bmi2"))]
+        {
+            head = len / 8 * 8;
+
+            for i in (0..head).step_by(8) {
+                let chunk = &self[i..i + 8].try_into().unwrap();
+                let ascii = u64::from_ne_bytes(*chunk);
+                let packed_bytes =
+                    unsafe { std::arch::x86_64::_pext_u64(ascii, 0x0606060606060606) };
+                val |= packed_bytes << (i * 2);
+            }
+        }
+
+        for (i, &base) in self.iter().enumerate().skip(head) {
+            val |= match base {
+                b'a' | b'A' => 0,
+                b'c' | b'C' => 1,
+                b'g' | b'G' => 3,
+                b't' | b'T' => 2,
+                _ => panic!(),
+            } << (i * 2);
+        }
+        val as usize
+    }
+
+    #[inline(always)]
     fn slice(&self, range: Range<usize>) -> Self {
         &self[range]
     }
 
+    /// Iterate the basepairs in the sequence, assuming values in `0..4`.
     #[inline(always)]
     fn iter_bp(self) -> impl ExactSizeIterator<Item = u8> {
         self.iter().copied()
     }
 
+    /// Iterate the basepairs in the sequence in 8 parallel streams, assuming values in `0..4`.
     #[inline(always)]
     fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S>, Self) {
         let num_kmers = self.len().saturating_sub(context - 1);
@@ -152,6 +196,11 @@ impl<'s> Seq for PackedSeq<'s> {
         unsafe {
             ((self.seq.as_ptr() as *const usize).read_unaligned() >> (2 * self.offset)) & mask
         }
+    }
+
+    #[inline(always)]
+    fn to_packed_word(&self) -> usize {
+        self.to_word()
     }
 
     #[inline(always)]
@@ -425,5 +474,21 @@ mod test {
             assert_eq!(len1, packed_2.len);
             assert_eq!(packed_1, packed_2.seq);
         }
+    }
+
+    #[test]
+    fn pack_word() {
+        let packed = PackedSeqVec::from_ascii(b"ACGTACGTACGTACGTACGTACGTACGT");
+        let slice = packed.slice(0..4);
+        assert_eq!(slice.to_packed_word(), 0b10110100);
+        let slice = packed.slice(0..8);
+        assert_eq!(slice.to_packed_word(), 0b1011010010110100);
+        let slice = packed.slice(0..16);
+        assert_eq!(slice.to_packed_word(), 0b10110100101101001011010010110100);
+        let slice = packed.slice(0..28);
+        assert_eq!(
+            slice.to_packed_word(),
+            0b10110100101101001011010010110100101101001011010010110100
+        );
     }
 }
