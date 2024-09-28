@@ -17,7 +17,7 @@ mod intrinsics;
 
 use core::{array::from_fn, mem::transmute};
 use epserde::{deser::DeserializeInner, ser::SerializeInner, Epserde};
-use std::ops::{Deref, Range};
+use std::ops::Range;
 use wide::u64x4;
 
 /// A SIMD vector containing 8 u32s.
@@ -83,31 +83,40 @@ impl<'s> Seq for AsciiSeq<'s> {
 
         let mut val = 0u64;
 
-        #[allow(unused)]
-        let mut head = 0;
-
         #[cfg(all(target_arch = "x86_64", target_feature = "bmi2"))]
         {
-            head = len / 8 * 8;
-
-            for i in (0..head).step_by(8) {
-                let chunk = &self.0[i..i + 8].try_into().unwrap();
-                let ascii = u64::from_ne_bytes(*chunk);
-                let packed_bytes =
-                    unsafe { std::arch::x86_64::_pext_u64(ascii, 0x0606060606060606) };
+            for i in (0..len).step_by(8) {
+                let packed_bytes = if i + 8 <= self.len() {
+                    let chunk: &[u8; 8] = &self.0[i..i + 8].try_into().unwrap();
+                    let ascii = u64::from_ne_bytes(*chunk);
+                    unsafe { std::arch::x86_64::_pext_u64(ascii, 0x0606060606060606) }
+                } else {
+                    let mut chunk: [u8; 8] = [0; 8];
+                    // Copy only part of the slice to avoid out-of-bounds indexing.
+                    chunk[..self.len() - i].copy_from_slice(self.0[i..].try_into().unwrap());
+                    let ascii = u64::from_ne_bytes(chunk);
+                    unsafe { std::arch::x86_64::_pext_u64(ascii, 0x0606060606060606) }
+                };
                 val |= packed_bytes << (i * 2);
             }
         }
 
-        for (i, &base) in self.0.iter().enumerate().skip(head) {
-            val |= match base {
-                b'a' | b'A' => 0,
-                b'c' | b'C' => 1,
-                b'g' | b'G' => 3,
-                b't' | b'T' => 2,
-                _ => panic!(),
-            } << (i * 2);
+        #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2")))]
+        {
+            for (i, &base) in self.0.iter().enumerate().skip(head) {
+                val |= match base {
+                    b'a' | b'A' => 0,
+                    b'c' | b'C' => 1,
+                    b'g' | b'G' => 3,
+                    b't' | b'T' => 2,
+                    _ => panic!(
+                    "Unexpected character '{}' with ASCII value {base}. Expected one of ACTGactg.",
+                    base as char
+                ),
+                } << (i * 2);
+            }
         }
+
         val as usize
     }
 
@@ -126,7 +135,7 @@ impl<'s> Seq for AsciiSeq<'s> {
             let mut cache = 0;
             (0..self.len()).map(move |i| {
                 if i % 8 == 0 {
-                    if i <= self.len() - 8 {
+                    if i + 8 <= self.len() {
                         let chunk: &[u8; 8] = &self.0[i..i + 8].try_into().unwrap();
                         let ascii = u64::from_ne_bytes(*chunk);
                         cache = unsafe { std::arch::x86_64::_pext_u64(ascii, 0x0606060606060606) };
