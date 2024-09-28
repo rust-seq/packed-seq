@@ -17,6 +17,7 @@ mod intrinsics;
 
 use core::{array::from_fn, mem::transmute};
 use epserde::{deser::DeserializeInner, ser::SerializeInner, Epserde};
+use mem_dbg::{MemDbg, MemSize};
 use std::ops::Range;
 use wide::u64x4;
 
@@ -55,7 +56,7 @@ pub trait Seq: Copy {
 /// A `&[u8]` representing an ASCII sequence.
 /// Only supported characters are `ACGTacgt`.
 /// Other characters will be silently mapped into `[0, 4)`, or may cause panics.
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, MemSize, MemDbg)]
 pub struct AsciiSeq<'s>(pub &'s [u8]);
 
 /// An owned ASCII sequence.
@@ -63,7 +64,7 @@ pub struct AsciiSeq<'s>(pub &'s [u8]);
 /// Other characters will be silently mapped into `[0, 4)`, or may cause panics.
 ///
 /// TODO: Should this be a strong type instead?
-#[derive(Clone, Debug, Default, Epserde)]
+#[derive(Clone, Debug, Default, Epserde, MemSize, MemDbg)]
 pub struct AsciiSeqVec(pub Vec<u8>);
 
 /// Maps ASCII to `[0, 4)` on the fly.

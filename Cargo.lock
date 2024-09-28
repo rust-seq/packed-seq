@@ -243,6 +243,7 @@ name = "packed-seq"
 version = "0.1.0"
 dependencies = [
  "epserde",
+ "mem_dbg",
  "rand",
  "wide",
 ]
