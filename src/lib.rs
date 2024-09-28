@@ -408,7 +408,7 @@ pub trait SeqVec: Default + Sync + SerializeInner + DeserializeInner {
         (seq, ranges)
     }
 
-    fn random(n: usize, alphabet: usize) -> Self;
+    fn random(n: usize) -> Self;
 }
 
 impl SeqVec for Vec<u8> {
@@ -426,9 +426,9 @@ impl SeqVec for Vec<u8> {
         range
     }
 
-    fn random(n: usize, alphabet: usize) -> Self {
+    fn random(n: usize) -> Self {
         (0..n)
-            .map(|_| ((rand::random::<u8>() as usize) % alphabet) as u8)
+            .map(|_| b"ACGT"[rand::random::<u8>() as usize])
             .collect()
     }
 }
@@ -458,9 +458,7 @@ impl SeqVec for PackedSeqVec {
         start..end
     }
 
-    fn random(n: usize, alphabet: usize) -> Self {
-        assert!(alphabet == 4);
-
+    fn random(n: usize) -> Self {
         let seq = (0..n.div_ceil(4)).map(|_| rand::random::<u8>()).collect();
         PackedSeqVec { seq, len: n }
     }
