@@ -8,3 +8,12 @@ epserde = "0.6.1"
 wide = "0.7.28"
 rand = "0.8.5"
 mem_dbg = "0.2.4"
+
+# Optional for python bindings
+pyo3 = { version = "0.22.2", features = ["extension-module"], optional = true }
+
+[features]
+# Enable python bindings
+python-bindings = ['dep:pyo3']
+
+default = ['python-bindings']

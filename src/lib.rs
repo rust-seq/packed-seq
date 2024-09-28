@@ -103,6 +103,7 @@ pub struct AsciiSeq<'s>(pub &'s [u8]);
 ///
 /// TODO: Should this be a strong type instead?
 #[derive(Clone, Debug, Default, Epserde, MemSize, MemDbg)]
+#[cfg_attr(feature = "python-bindings", pyo3::pyclass)]
 pub struct AsciiSeqVec {
     pub seq: Vec<u8>,
     pub ranges: Vec<(usize, usize)>,
