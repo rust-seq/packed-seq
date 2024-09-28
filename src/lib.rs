@@ -2,8 +2,8 @@
 //!
 //! What this library does:
 //! - Allowing APIs to take an `impl Seq` type that provides a `iter_bp` function to iterate all bases in the sequence as `u8` values in `0..4`.
-//! - Providing `OwnedPackedSeq` storage of packed sequence and `PackedSeq` slices over packed data.
-//! - Efficiently converting from ASCII representation to `OwnedPackedSeq`.
+//! - Providing `PackedSeqVec` storage of packed sequence and `PackedSeq` slices over packed data.
+//! - Efficiently converting from ASCII representation to `PackedSeqVec`.
 //!
 //! What this library does not:
 //! - Handling non-ACGT characters.
@@ -288,15 +288,15 @@ impl<'s> Seq for PackedSeq<'s> {
     }
 }
 
-impl OwnedPackedSeq {
-    /// Create an `OwnedPackedSeq` from an ASCII sequence. See `push_ascii` for details.
+impl PackedSeqVec {
+    /// Create an `PackedSeqVec` from an ASCII sequence. See `push_ascii` for details.
     pub fn from_ascii(seq: &[u8]) -> Self {
         let mut packed_vec = Self::default();
         packed_vec.push_ascii(seq);
         packed_vec
     }
 
-    /// Push an ASCII sequence to an `OwnedPackedSeq`.
+    /// Push an ASCII sequence to an `PackedSeqVec`.
     /// `Aa` map to `0`, `Cc` to `1`, `Gg` to `3`, and `Tt` to `2`.
     /// Panics on any other character.
     ///
@@ -350,7 +350,7 @@ impl OwnedPackedSeq {
     }
 }
 
-pub trait OwnedSeq: Default + Sync + SerializeInner + DeserializeInner {
+pub trait SeqVec: Default + Sync + SerializeInner + DeserializeInner {
     type Seq<'s>: Seq;
 
     fn as_slice(&self) -> Self::Seq<'_>;
@@ -380,7 +380,7 @@ pub trait OwnedSeq: Default + Sync + SerializeInner + DeserializeInner {
     fn random(n: usize, alphabet: usize) -> Self;
 }
 
-impl OwnedSeq for Vec<u8> {
+impl SeqVec for Vec<u8> {
     type Seq<'s> = &'s [u8];
 
     fn as_slice(&self) -> Self::Seq<'_> {
@@ -403,12 +403,12 @@ impl OwnedSeq for Vec<u8> {
 }
 
 #[derive(Debug, Default, Epserde)]
-pub struct OwnedPackedSeq {
+pub struct PackedSeqVec {
     pub seq: Vec<u8>,
     pub len: usize,
 }
 
-impl OwnedSeq for OwnedPackedSeq {
+impl SeqVec for PackedSeqVec {
     type Seq<'s> = PackedSeq<'s>;
 
     fn as_slice(&self) -> Self::Seq<'_> {
@@ -431,7 +431,7 @@ impl OwnedSeq for OwnedPackedSeq {
         assert!(alphabet == 4);
 
         let seq = (0..n.div_ceil(4)).map(|_| rand::random::<u8>()).collect();
-        OwnedPackedSeq { seq, len: n }
+        PackedSeqVec { seq, len: n }
     }
 }
 
@@ -470,7 +470,7 @@ mod test {
                 .map(|_| b"ACGTacgt"[rand::random::<u8>() as usize % 8])
                 .collect();
             let (packed_1, len1) = pack_naive(&seq);
-            let packed_2 = OwnedPackedSeq::from_ascii(&seq);
+            let packed_2 = PackedSeqVec::from_ascii(&seq);
             assert_eq!(len1, packed_2.len);
             assert_eq!(packed_1, packed_2.seq);
         }
