@@ -26,6 +26,8 @@ pub use wide::u32x8 as S;
 /// The number of lanes in `S`.
 pub const L: usize = 8;
 
+// ---------------- TRAITS ----------------
+
 /// Interface to sequences over a 2-bit alphabet.
 ///
 /// Currently supports `&[u8]`, where each `u8` must be in `0..4`, and the
@@ -57,6 +59,38 @@ pub trait Seq: Copy {
     fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S>, Self);
 }
 
+pub trait SeqVec: Default + Sync + SerializeInner + DeserializeInner {
+    type Seq<'s>: Seq;
+
+    fn as_slice(&self) -> Self::Seq<'_>;
+
+    /// Get a sub-slice of the sequence.
+    fn slice(&self, range: Range<usize>) -> Self::Seq<'_> {
+        self.as_slice().slice(range)
+    }
+
+    /// The length of the sequence in bp.
+    fn len(&self) -> usize {
+        self.as_slice().len()
+    }
+
+    /// Append the given sequence to the underlying storage.
+    /// This may leave gaps (padding) between consecutively pushed sequences to avoid re-aligning the pushed data.
+    /// Returns the range of indices corresponding to the pushed sequence.
+    /// Use `self.as_slice()[range]` to get the corresponding slice.
+    fn push_seq(&mut self, seq: Self::Seq<'_>) -> Range<usize>;
+
+    fn from_seqs<'a>(input_seqs: impl Iterator<Item = Self::Seq<'a>>) -> (Self, Vec<Range<usize>>) {
+        let mut seq = Self::default();
+        let ranges = input_seqs.map(|slice| seq.push_seq(slice)).collect();
+        (seq, ranges)
+    }
+
+    fn random(n: usize) -> Self;
+}
+
+// ---------------- STRUCTS ----------------
+
 /// A `&[u8]` representing an ASCII sequence.
 /// Only supported characters are `ACGTacgt`.
 /// Other characters will be silently mapped into `[0, 4)`, or may cause panics.
@@ -70,6 +104,26 @@ pub struct AsciiSeq<'s>(pub &'s [u8]);
 /// TODO: Should this be a strong type instead?
 #[derive(Clone, Debug, Default, Epserde, MemSize, MemDbg)]
 pub struct AsciiSeqVec(pub Vec<u8>);
+
+/// A 2-bit packed sequence representation.
+#[derive(Copy, Clone)]
+pub struct PackedSeq<'s> {
+    /// Packed data.
+    pub seq: &'s [u8],
+    /// Offset in bp from the start of the `seq`.
+    pub offset: usize,
+    /// Length of the sequence in bp, starting at `offset` from the start of `seq`.
+    pub len: usize,
+}
+
+#[derive(Debug, Default, Epserde)]
+pub struct PackedSeqVec {
+    pub seq: Vec<u8>,
+    pub len: usize,
+    pub ranges: Vec<(usize, usize)>,
+}
+
+// ---------------- IMPLEMENTATIONS ----------------
 
 /// Maps ASCII to `[0, 4)` on the fly.
 /// Prefer first packing into a `PackedSeqVec` for storage.
@@ -216,17 +270,6 @@ impl<'s> Seq for AsciiSeq<'s> {
 
         (it, Self(&self.0[L * n..]))
     }
-}
-
-/// A 2-bit packed sequence representation.
-#[derive(Copy, Clone)]
-pub struct PackedSeq<'s> {
-    /// Packed data.
-    pub seq: &'s [u8],
-    /// Offset in bp from the start of the `seq`.
-    pub offset: usize,
-    /// Length of the sequence in bp, starting at `offset` from the start of `seq`.
-    pub len: usize,
 }
 
 impl<'s> PackedSeq<'s> {
@@ -419,31 +462,6 @@ impl PackedSeqVec {
     }
 }
 
-pub trait SeqVec: Default + Sync + SerializeInner + DeserializeInner {
-    type Seq<'s>: Seq;
-
-    fn as_slice(&self) -> Self::Seq<'_>;
-
-    /// Get a sub-slice of the sequence.
-    fn slice(&self, range: Range<usize>) -> Self::Seq<'_> {
-        self.as_slice().slice(range)
-    }
-
-    /// The length of the sequence in bp.
-    fn len(&self) -> usize {
-        self.as_slice().len()
-    }
-
-    /// Append the given sequence to the underlying storage.
-    /// This may leave gaps (padding) between consecutively pushed sequences to avoid re-aligning the pushed data.
-    /// Returns the range of indices corresponding to the pushed sequence.
-    /// Use `self.as_slice()[range]` to get the corresponding slice.
-    fn push_seq(&mut self, seq: Self::Seq<'_>) -> Range<usize>;
-
-    fn from_seqs<'a>(input_seqs: impl Iterator<Item = Self::Seq<'a>>) -> (Self, Vec<Range<usize>>) {
-        let mut seq = Self::default();
-        let ranges = input_seqs.map(|slice| seq.push_seq(slice)).collect();
-        (seq, ranges)
     }
 
     fn random(n: usize) -> Self;
@@ -471,12 +489,6 @@ impl SeqVec for AsciiSeqVec {
                 .collect(),
         )
     }
-}
-
-#[derive(Debug, Default, Epserde)]
-pub struct PackedSeqVec {
-    pub seq: Vec<u8>,
-    pub len: usize,
 }
 
 impl SeqVec for PackedSeqVec {
