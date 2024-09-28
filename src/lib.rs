@@ -103,7 +103,10 @@ pub struct AsciiSeq<'s>(pub &'s [u8]);
 ///
 /// TODO: Should this be a strong type instead?
 #[derive(Clone, Debug, Default, Epserde, MemSize, MemDbg)]
-pub struct AsciiSeqVec(pub Vec<u8>);
+pub struct AsciiSeqVec {
+    pub seq: Vec<u8>,
+    pub ranges: Vec<(usize, usize)>,
+}
 
 /// A 2-bit packed sequence representation.
 #[derive(Copy, Clone)]
@@ -182,7 +185,10 @@ impl<'s> Seq for AsciiSeq<'s> {
 
     /// Convert to an owned version.
     fn to_vec(&self) -> AsciiSeqVec {
-        AsciiSeqVec(self.0.to_vec())
+        AsciiSeqVec {
+            seq: self.0.to_vec(),
+            ranges: vec![(0, self.len())],
+        }
     }
 
     #[inline(always)]
@@ -310,6 +316,7 @@ impl<'s> Seq for PackedSeq<'s> {
         PackedSeqVec {
             seq: self.seq.to_vec(),
             len: self.len,
+            ranges: vec![(0, self.len)],
         }
     }
 
@@ -462,32 +469,38 @@ impl PackedSeqVec {
     }
 }
 
+impl AsciiSeqVec {
+    pub fn from_vec(seq: Vec<u8>) -> Self {
+        Self {
+            ranges: vec![(0, seq.len())],
+            seq,
+        }
     }
-
-    fn random(n: usize) -> Self;
 }
 
 impl SeqVec for AsciiSeqVec {
     type Seq<'s> = AsciiSeq<'s>;
 
     fn as_slice(&self) -> Self::Seq<'_> {
-        AsciiSeq(self.0.as_slice())
+        AsciiSeq(self.seq.as_slice())
     }
 
     fn push_seq(&mut self, seq: AsciiSeq) -> Range<usize> {
         let start = seq.len();
         let end = start + seq.len();
         let range = start..end;
-        self.0.extend(seq.0);
+        self.seq.extend(seq.0);
+        self.ranges.push((start, end));
         range
     }
 
     fn random(n: usize) -> Self {
-        Self(
-            (0..n)
+        Self {
+            seq: (0..n)
                 .map(|_| b"ACGT"[rand::random::<u8>() as usize % 4])
                 .collect(),
-        )
+            ranges: vec![(0, n)],
+        }
     }
 }
 
@@ -512,7 +525,11 @@ impl SeqVec for PackedSeqVec {
 
     fn random(n: usize) -> Self {
         let seq = (0..n.div_ceil(4)).map(|_| rand::random::<u8>()).collect();
-        PackedSeqVec { seq, len: n }
+        PackedSeqVec {
+            seq,
+            len: n,
+            ranges: vec![(0, n)],
+        }
     }
 }
 
