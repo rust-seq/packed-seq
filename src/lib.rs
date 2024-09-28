@@ -466,6 +466,7 @@ impl PackedSeqVec {
         if self.len % 4 != 0 {
             self.seq.push(packed_byte);
         }
+        self.ranges.push((start, start + len));
         start..start + len
     }
 }
@@ -487,7 +488,7 @@ impl SeqVec for AsciiSeqVec {
     }
 
     fn push_seq(&mut self, seq: AsciiSeq) -> Range<usize> {
-        let start = seq.len();
+        let start = self.seq.len();
         let end = start + seq.len();
         let range = start..end;
         self.seq.extend(seq.0);
@@ -521,6 +522,7 @@ impl SeqVec for PackedSeqVec {
         let end = start + seq.len();
         self.seq.extend(seq.seq);
         self.len = 4 * self.seq.len();
+        self.ranges.push((start, end));
         start..end
     }
 
