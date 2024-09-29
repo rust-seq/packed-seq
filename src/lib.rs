@@ -86,6 +86,8 @@ pub trait SeqVec: Default + Sync + SerializeInner + DeserializeInner {
         (seq, ranges)
     }
 
+    fn ranges(&mut self) -> &mut Vec<(usize, usize)>;
+
     fn random(n: usize) -> Self;
 }
 
@@ -496,6 +498,10 @@ impl SeqVec for AsciiSeqVec {
         range
     }
 
+    fn ranges(&mut self) -> &mut Vec<(usize, usize)> {
+        &mut self.ranges
+    }
+
     fn random(n: usize) -> Self {
         Self {
             seq: (0..n)
@@ -524,6 +530,10 @@ impl SeqVec for PackedSeqVec {
         self.len = 4 * self.seq.len();
         self.ranges.push((start, end));
         start..end
+    }
+
+    fn ranges(&mut self) -> &mut Vec<(usize, usize)> {
+        &mut self.ranges
     }
 
     fn random(n: usize) -> Self {
