@@ -112,7 +112,7 @@ pub struct AsciiSeqVec {
 }
 
 /// A 2-bit packed sequence representation.
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, MemSize, MemDbg)]
 pub struct PackedSeq<'s> {
     /// Packed data.
     pub seq: &'s [u8],
@@ -122,7 +122,8 @@ pub struct PackedSeq<'s> {
     pub len: usize,
 }
 
-#[derive(Debug, Default, Epserde)]
+#[derive(Clone, Debug, Default, Epserde, MemSize, MemDbg)]
+#[cfg_attr(feature = "python-bindings", pyo3::pyclass)]
 pub struct PackedSeqVec {
     pub seq: Vec<u8>,
     pub len: usize,
