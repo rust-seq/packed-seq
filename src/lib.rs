@@ -80,10 +80,25 @@ pub trait SeqVec: Default + Sync + SerializeInner + DeserializeInner {
     /// Use `self.as_slice()[range]` to get the corresponding slice.
     fn push_seq(&mut self, seq: Self::Seq<'_>) -> Range<usize>;
 
-    fn from_seqs<'a>(input_seqs: impl Iterator<Item = Self::Seq<'a>>) -> (Self, Vec<Range<usize>>) {
+    /// Append the given ASCII sequence to the underlying storage.
+    /// This may leave gaps (padding) between consecutively pushed sequences to avoid re-aligning the pushed data.
+    /// Returns the range of indices corresponding to the pushed sequence.
+    /// Use `self.as_slice()[range]` to get the corresponding slice.
+    fn push_ascii(&mut self, seq: &[u8]) -> Range<usize>;
+
+    /// Create an `PackedSeqVec` from an ASCII sequence. See `push_ascii` for details.
+    fn from_ascii(seq: &[u8]) -> Self {
+        let mut packed_vec = Self::default();
+        packed_vec.push_ascii(seq);
+        packed_vec
+    }
+
+    fn from_seqs<'a>(input_seqs: impl Iterator<Item = Self::Seq<'a>>) -> Self {
         let mut seq = Self::default();
-        let ranges = input_seqs.map(|slice| seq.push_seq(slice)).collect();
-        (seq, ranges)
+        input_seqs.for_each(|slice| {
+            seq.push_seq(slice);
+        });
+        seq
     }
 
     fn ranges(&mut self) -> &mut Vec<(usize, usize)>;
@@ -409,12 +424,85 @@ impl<'s> Seq for PackedSeq<'s> {
     }
 }
 
-impl PackedSeqVec {
-    /// Create an `PackedSeqVec` from an ASCII sequence. See `push_ascii` for details.
-    pub fn from_ascii(seq: &[u8]) -> Self {
-        let mut packed_vec = Self::default();
-        packed_vec.push_ascii(seq);
-        packed_vec
+impl PartialEq for PackedSeq<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        if self.len != other.len {
+            return false;
+        }
+        // Compare 29 characters at a time by converting them to a word.
+        for i in (0..self.len).step_by(29) {
+            let len = (self.len - i).min(29);
+            let this = self.slice(i..i + len);
+            let that = other.slice(i..i + len);
+            if this.to_word() != that.to_word() {
+                return false;
+            }
+        }
+        return true;
+    }
+}
+
+impl AsciiSeqVec {
+    pub fn from_vec(seq: Vec<u8>) -> Self {
+        Self {
+            ranges: vec![(0, seq.len())],
+            seq,
+        }
+    }
+}
+
+impl SeqVec for AsciiSeqVec {
+    type Seq<'s> = AsciiSeq<'s>;
+
+    fn as_slice(&self) -> Self::Seq<'_> {
+        AsciiSeq(self.seq.as_slice())
+    }
+
+    fn push_seq(&mut self, seq: AsciiSeq) -> Range<usize> {
+        let start = self.seq.len();
+        let end = start + seq.len();
+        let range = start..end;
+        self.seq.extend(seq.0);
+        self.ranges.push((start, end));
+        range
+    }
+
+    fn push_ascii(&mut self, seq: &[u8]) -> Range<usize> {
+        self.push_seq(AsciiSeq(seq))
+    }
+
+    fn ranges(&mut self) -> &mut Vec<(usize, usize)> {
+        &mut self.ranges
+    }
+
+    fn random(n: usize) -> Self {
+        Self {
+            seq: (0..n)
+                .map(|_| b"ACGT"[rand::random::<u8>() as usize % 4])
+                .collect(),
+            ranges: vec![(0, n)],
+        }
+    }
+}
+
+impl SeqVec for PackedSeqVec {
+    type Seq<'s> = PackedSeq<'s>;
+
+    fn as_slice(&self) -> Self::Seq<'_> {
+        PackedSeq {
+            seq: &self.seq,
+            offset: 0,
+            len: self.len,
+        }
+    }
+
+    fn push_seq<'a>(&mut self, seq: PackedSeq<'_>) -> Range<usize> {
+        let start = 4 * self.seq.len() + seq.offset;
+        let end = start + seq.len();
+        self.seq.extend(seq.seq);
+        self.len = 4 * self.seq.len();
+        self.ranges.push((start, end));
+        start..end
     }
 
     /// Push an ASCII sequence to an `PackedSeqVec`.
@@ -428,8 +516,7 @@ impl PackedSeqVec {
     ///
     /// TODO: Optimize for non-BMI2 platforms.
     /// TODO: Support multiple ways of dealing with non-`ACGT` characters.
-    #[cfg(target_endian = "little")]
-    pub fn push_ascii(&mut self, seq: &[u8]) -> Range<usize> {
+    fn push_ascii(&mut self, seq: &[u8]) -> Range<usize> {
         let start = 4 * self.seq.len();
         let len = seq.len();
 
@@ -471,66 +558,6 @@ impl PackedSeqVec {
         }
         self.ranges.push((start, start + len));
         start..start + len
-    }
-}
-
-impl AsciiSeqVec {
-    pub fn from_vec(seq: Vec<u8>) -> Self {
-        Self {
-            ranges: vec![(0, seq.len())],
-            seq,
-        }
-    }
-}
-
-impl SeqVec for AsciiSeqVec {
-    type Seq<'s> = AsciiSeq<'s>;
-
-    fn as_slice(&self) -> Self::Seq<'_> {
-        AsciiSeq(self.seq.as_slice())
-    }
-
-    fn push_seq(&mut self, seq: AsciiSeq) -> Range<usize> {
-        let start = self.seq.len();
-        let end = start + seq.len();
-        let range = start..end;
-        self.seq.extend(seq.0);
-        self.ranges.push((start, end));
-        range
-    }
-
-    fn ranges(&mut self) -> &mut Vec<(usize, usize)> {
-        &mut self.ranges
-    }
-
-    fn random(n: usize) -> Self {
-        Self {
-            seq: (0..n)
-                .map(|_| b"ACGT"[rand::random::<u8>() as usize % 4])
-                .collect(),
-            ranges: vec![(0, n)],
-        }
-    }
-}
-
-impl SeqVec for PackedSeqVec {
-    type Seq<'s> = PackedSeq<'s>;
-
-    fn as_slice(&self) -> Self::Seq<'_> {
-        PackedSeq {
-            seq: &self.seq,
-            offset: 0,
-            len: self.len,
-        }
-    }
-
-    fn push_seq<'a>(&mut self, seq: PackedSeq<'_>) -> Range<usize> {
-        let start = 4 * self.seq.len() + seq.offset;
-        let end = start + seq.len();
-        self.seq.extend(seq.seq);
-        self.len = 4 * self.seq.len();
-        self.ranges.push((start, end));
-        start..end
     }
 
     fn ranges(&mut self) -> &mut Vec<(usize, usize)> {
