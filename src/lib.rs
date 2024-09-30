@@ -32,7 +32,7 @@ pub const L: usize = 8;
 ///
 /// Currently supports `&[u8]`, where each `u8` must be in `0..4`, and the
 /// `PackedSeq` type that contains packed sequences.
-pub trait Seq<'s>: Copy {
+pub trait Seq<'s>: Copy + Eq + Ord {
     const BASES_PER_BYTE: usize;
     type SeqVec: SeqVec;
 
@@ -114,7 +114,7 @@ pub trait SeqVec: Default + Sync + SerializeInner + DeserializeInner {
 /// A `&[u8]` representing an ASCII sequence.
 /// Only supported characters are `ACGTacgt`.
 /// Other characters will be silently mapped into `[0, 4)`, or may cause panics.
-#[derive(Copy, Clone, Debug, MemSize, MemDbg, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, MemSize, MemDbg, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AsciiSeq<'s>(pub &'s [u8]);
 
 /// An owned ASCII sequence.
@@ -455,6 +455,31 @@ impl PartialEq for PackedSeq<'_> {
             }
         }
         return true;
+    }
+}
+
+impl Eq for PackedSeq<'_> {}
+
+impl PartialOrd for PackedSeq<'_> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for PackedSeq<'_> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        // Compare 29 characters at a time by converting them to a word.
+        for i in (0..self.len).step_by(29) {
+            let len = (self.len - i).min(29);
+            let this = self.slice(i..i + len);
+            let other = other.slice(i..i + len);
+            let this_word = this.to_word();
+            let other_word = other.to_word();
+            if this_word != other_word {
+                return this_word.cmp(&other_word);
+            }
+        }
+        self.len.cmp(&other.len)
     }
 }
 
