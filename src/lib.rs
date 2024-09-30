@@ -68,7 +68,7 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S>, Self);
 }
 
-pub trait SeqVec: Default + Sync + SerializeInner + DeserializeInner {
+pub trait SeqVec: Default + Sync + SerializeInner + DeserializeInner + MemSize + MemDbg {
     type Seq<'s>: Seq<'s>;
 
     fn as_slice(&self) -> Self::Seq<'_>;
