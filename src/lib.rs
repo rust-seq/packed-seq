@@ -83,6 +83,9 @@ pub trait SeqVec: Default + Sync + SerializeInner + DeserializeInner {
         self.as_slice().len()
     }
 
+    /// Convert into the underlying raw representation.
+    fn into_raw(self) -> Vec<u8>;
+
     /// Append the given sequence to the underlying storage.
     /// This may leave gaps (padding) between consecutively pushed sequences to avoid re-aligning the pushed data.
     /// Returns the range of indices corresponding to the pushed sequence.
@@ -506,6 +509,11 @@ impl AsciiSeqVec {
 impl SeqVec for AsciiSeqVec {
     type Seq<'s> = AsciiSeq<'s>;
 
+    /// Get the underlying ASCII text.
+    fn into_raw(self) -> Vec<u8> {
+        self.seq
+    }
+
     fn as_slice(&self) -> Self::Seq<'_> {
         AsciiSeq(self.seq.as_slice())
     }
@@ -539,6 +547,10 @@ impl SeqVec for AsciiSeqVec {
 
 impl SeqVec for PackedSeqVec {
     type Seq<'s> = PackedSeq<'s>;
+
+    fn into_raw(self) -> Vec<u8> {
+        self.seq
+    }
 
     fn as_slice(&self) -> Self::Seq<'_> {
         PackedSeq {
