@@ -42,6 +42,12 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     /// The length of the sequence in bp.
     fn len(&self) -> usize;
 
+    /// Get the ASCII character at the given index, _without_ packing it.
+    /// Not implemented for packed data.
+    fn get_ascii(&self, _index: usize) -> u8 {
+        unimplemented!()
+    }
+
     /// Convert a short sequence (kmer) to a packed word.
     /// Panics if `self` is longer than 29 characters.
     fn to_word(&self) -> usize;
@@ -163,6 +169,11 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
     #[inline(always)]
     fn len(&self) -> usize {
         self.0.len()
+    }
+
+    #[inline(always)]
+    fn get_ascii(&self, index: usize) -> u8 {
+        self.0[index]
     }
 
     #[inline(always)]
