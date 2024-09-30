@@ -32,9 +32,12 @@ pub const L: usize = 8;
 ///
 /// Currently supports `&[u8]`, where each `u8` must be in `0..4`, and the
 /// `PackedSeq` type that contains packed sequences.
-pub trait Seq: Copy {
+pub trait Seq<'s>: Copy {
     const BASES_PER_BYTE: usize;
     type SeqVec: SeqVec;
+
+    /// Construct a view of the given data spanning `len` characters.
+    fn new(data: &'s [u8], len: usize) -> Self;
 
     /// The length of the sequence in bp.
     fn len(&self) -> usize;
@@ -60,7 +63,7 @@ pub trait Seq: Copy {
 }
 
 pub trait SeqVec: Default + Sync + SerializeInner + DeserializeInner {
-    type Seq<'s>: Seq;
+    type Seq<'s>: Seq<'s>;
 
     fn as_slice(&self) -> Self::Seq<'_>;
 
@@ -149,9 +152,13 @@ pub struct PackedSeqVec {
 
 /// Maps ASCII to `[0, 4)` on the fly.
 /// Prefer first packing into a `PackedSeqVec` for storage.
-impl<'s> Seq for AsciiSeq<'s> {
+impl<'s> Seq<'s> for AsciiSeq<'s> {
     const BASES_PER_BYTE: usize = 1;
     type SeqVec = AsciiSeqVec;
+
+    fn new(data: &'s [u8], len: usize) -> Self {
+        Self(&data[..len])
+    }
 
     #[inline(always)]
     fn len(&self) -> usize {
@@ -311,9 +318,18 @@ impl<'s> PackedSeq<'s> {
     }
 }
 
-impl<'s> Seq for PackedSeq<'s> {
+impl<'s> Seq<'s> for PackedSeq<'s> {
     const BASES_PER_BYTE: usize = 4;
     type SeqVec = PackedSeqVec;
+
+    /// Construct a view of the given data spanning `len` characters.
+    fn new(data: &'s [u8], len: usize) -> Self {
+        Self {
+            seq: data,
+            offset: 0,
+            len,
+        }
+    }
 
     #[inline(always)]
     fn len(&self) -> usize {
