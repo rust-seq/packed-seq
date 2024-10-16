@@ -371,7 +371,12 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
 
     #[inline(always)]
     fn slice(&self, range: Range<usize>) -> Self {
-        assert!(range.end <= self.len);
+        assert!(
+            range.end <= self.len,
+            "Slice index out of bounds: {} > {}",
+            range.end,
+            self.len
+        );
         PackedSeq {
             seq: self.seq,
             offset: self.offset + range.start,
@@ -483,14 +488,19 @@ impl PartialOrd for PackedSeq<'_> {
 impl Ord for PackedSeq<'_> {
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         // Compare 29 characters at a time by converting them to a word.
-        for i in (0..self.len).step_by(29) {
-            let len = (self.len - i).min(29);
+        let min_len = self.len.min(other.len);
+        for i in (0..min_len).step_by(29) {
+            let len = (min_len - i).min(29);
             let this = self.slice(i..i + len);
             let other = other.slice(i..i + len);
             let this_word = this.to_word();
             let other_word = other.to_word();
             if this_word != other_word {
-                return this_word.cmp(&other_word);
+                // Unfortunately, bases are packed in little endian order, so the default order is reversed.
+                let eq = this_word ^ other_word;
+                let t = eq.trailing_zeros() / 2 * 2;
+                let mask = 0b11 << t;
+                return (this_word & mask).cmp(&(other_word & mask));
             }
         }
         self.len.cmp(&other.len)
@@ -693,5 +703,44 @@ mod test {
             slice.to_word(),
             0b10110100101101001011010010110100101101001011010010110100
         );
+    }
+
+    #[test]
+    fn packed_ord() {
+        let ascii_seq = b"ACGTACGTACGTACGTACGTACGTACGT";
+        let packed_seq = ascii_seq
+            .iter()
+            .map(|c| match c {
+                // Swap G and T values since they are encoded in opposite order.
+                b'G' => b'T',
+                b'T' => b'G',
+                c => *c,
+            })
+            .collect::<Vec<_>>();
+        let ascii = AsciiSeqVec::from_ascii(ascii_seq);
+        let packed = PackedSeqVec::from_ascii(&packed_seq);
+        for i in 0..ascii.len() {
+            for j in i..ascii.len() {
+                for k in 0..ascii.len() {
+                    for l in k..ascii.len() {
+                        let a0 = ascii.as_slice().slice(i..j);
+                        let a1 = ascii.as_slice().slice(k..l);
+                        let b0 = packed.as_slice().slice(i..j);
+                        let b1 = packed.as_slice().slice(k..l);
+                        assert_eq!(
+                            a0.cmp(&a1),
+                            b0.cmp(&b1),
+                            "Failed at ({}, {})={:?}, ({}, {})={:?}",
+                            i,
+                            j,
+                            &ascii_seq[i..j],
+                            k,
+                            l,
+                            &ascii_seq[k..l]
+                        );
+                    }
+                }
+            }
+        }
     }
 }
