@@ -66,6 +66,9 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     /// Returns a separate `tail` iterator over the remaining characters.
     /// The context can be e.g. the k-mer size being iterated. When `context>1`, consecutive chunk overlap by `context-1` bases.
     fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S>, Self);
+
+    /// Compare and return the LCP of the two sequences.
+    fn cmp_lcp(&self, other: &Self) -> (std::cmp::Ordering, usize);
 }
 
 pub trait SeqVec: Default + Sync + SerializeInner + DeserializeInner + MemSize + MemDbg {
@@ -316,6 +319,15 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
 
         (it, Self(&self.0[L * n..]))
     }
+
+    fn cmp_lcp(&self, other: &Self) -> (std::cmp::Ordering, usize) {
+        for i in 0..self.len().min(other.len()) {
+            if self.0[i] != other.0[i] {
+                return (self.0[i].cmp(&other.0[i]), i);
+            }
+        }
+        (self.len().cmp(&other.len()), self.len().min(other.len()))
+    }
 }
 
 impl<'s> PackedSeq<'s> {
@@ -456,6 +468,29 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                 len: self.len - L * n,
             },
         )
+    }
+
+    fn cmp_lcp(&self, other: &Self) -> (std::cmp::Ordering, usize) {
+        // Compare 29 characters at a time by converting them to a word.
+        let mut lcp = 0;
+        let min_len = self.len.min(other.len);
+        for i in (0..min_len).step_by(29) {
+            let len = (min_len - i).min(29);
+            let this = self.slice(i..i + len);
+            let other = other.slice(i..i + len);
+            let this_word = this.to_word();
+            let other_word = other.to_word();
+            if this_word != other_word {
+                // Unfortunately, bases are packed in little endian order, so the default order is reversed.
+                let eq = this_word ^ other_word;
+                let t = eq.trailing_zeros() / 2 * 2;
+                lcp += t as usize / 2;
+                let mask = 0b11 << t;
+                return ((this_word & mask).cmp(&(other_word & mask)), lcp);
+            }
+            lcp += len;
+        }
+        (self.len.cmp(&other.len), lcp)
     }
 }
 
