@@ -209,7 +209,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
 
         #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2")))]
         {
-            for (i, &base) in self.0.iter().enumerate().skip(head) {
+            for (i, &base) in self.0.iter().enumerate() {
                 val |= match base {
                     b'a' | b'A' => 0,
                     b'c' | b'C' => 1,
@@ -268,7 +268,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         }
 
         #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2")))]
-        self.iter().map(|base| match base {
+        self.0.iter().map(|base| match base {
             b'a' | b'A' => 0,
             b'c' | b'C' => 1,
             b'g' | b'G' => 3,
