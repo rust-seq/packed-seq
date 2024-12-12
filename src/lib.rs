@@ -18,6 +18,7 @@ mod intrinsics;
 use core::{array::from_fn, mem::transmute};
 use epserde::{deser::DeserializeInner, ser::SerializeInner, Epserde};
 use mem_dbg::{MemDbg, MemSize};
+use rand::Rng;
 use std::ops::Range;
 use wide::u64x4;
 
@@ -581,9 +582,10 @@ impl SeqVec for AsciiSeqVec {
     }
 
     fn random(n: usize) -> Self {
+        let mut rng = rand::thread_rng();
         Self {
             seq: (0..n)
-                .map(|_| b"ACGT"[rand::random::<u8>() as usize % 4])
+                .map(|_| b"ACGT"[rng.gen::<u8>() as usize % 4])
                 .collect(),
             ranges: vec![(0, n)],
         }
@@ -674,7 +676,8 @@ impl SeqVec for PackedSeqVec {
     }
 
     fn random(n: usize) -> Self {
-        let seq = (0..n.div_ceil(4)).map(|_| rand::random::<u8>()).collect();
+        let mut rng = rand::thread_rng();
+        let seq = (0..n.div_ceil(4)).map(|_| rng.gen::<u8>()).collect();
         PackedSeqVec {
             seq,
             len: n,
@@ -714,8 +717,9 @@ mod test {
     #[test]
     fn pack() {
         for n in 0..=128 {
+            let mut rng = rand::thread_rng();
             let seq: Vec<_> = (0..n)
-                .map(|_| b"ACGTacgt"[rand::random::<u8>() as usize % 8])
+                .map(|_| b"ACGTacgt"[rng.gen::<u8>() as usize % 8])
                 .collect();
             let (packed_1, len1) = pack_naive(&seq);
             let packed_2 = PackedSeqVec::from_ascii(&seq);
