@@ -61,12 +61,12 @@ pub trait Seq<'s>: Copy + Eq + Ord {
 
     /// A simple iterator over characters.
     /// Returns u8 values in [0, 4).
-    fn iter_bp(self) -> impl ExactSizeIterator<Item = u8>;
+    fn iter_bp(self) -> impl ExactSizeIterator<Item = u8> + Clone;
 
     /// An iterator that splits the input into 8 chunks and streams over them in parallel.
     /// Returns a separate `tail` iterator over the remaining characters.
     /// The context can be e.g. the k-mer size being iterated. When `context>1`, consecutive chunk overlap by `context-1` bases.
-    fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S>, Self);
+    fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S> + Clone, Self);
 
     /// Compare and return the LCP of the two sequences.
     fn cmp_lcp(&self, other: &Self) -> (std::cmp::Ordering, usize);
@@ -244,7 +244,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
     ///
     /// NOTE: This is only efficient on x86_64 with `BMI2` support for `pext`.
     #[inline(always)]
-    fn iter_bp(self) -> impl ExactSizeIterator<Item = u8> {
+    fn iter_bp(self) -> impl ExactSizeIterator<Item = u8> + Clone {
         #[cfg(all(target_arch = "x86_64", target_feature = "bmi2"))]
         {
             let mut cache = 0;
@@ -280,7 +280,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
 
     /// Iterate the basepairs in the sequence in 8 parallel streams, assuming values in `0..4`.
     #[inline(always)]
-    fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S>, Self) {
+    fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S> + Clone, Self) {
         let num_kmers = self.len().saturating_sub(context - 1);
         let n = num_kmers / L;
 
@@ -399,7 +399,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
     }
 
     #[inline(always)]
-    fn iter_bp(self) -> impl ExactSizeIterator<Item = u8> {
+    fn iter_bp(self) -> impl ExactSizeIterator<Item = u8> + Clone {
         assert!(self.len <= self.seq.len() * 4);
 
         let this = self.normalize();
@@ -418,7 +418,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
     }
 
     #[inline(always)]
-    fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S>, Self) {
+    fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S> + Clone, Self) {
         #[cfg(target_endian = "big")]
         panic!("Big endian architectures are not supported.");
 
