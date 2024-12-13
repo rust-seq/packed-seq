@@ -19,7 +19,7 @@ use core::{array::from_fn, mem::transmute};
 use epserde::{deser::DeserializeInner, ser::SerializeInner, Epserde};
 use mem_dbg::{MemDbg, MemSize};
 use rand::Rng;
-use std::ops::Range;
+use std::{hint::assert_unchecked, ops::Range};
 use wide::u64x4;
 
 /// A SIMD vector containing 8 u32s.
@@ -67,6 +67,17 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     /// Returns a separate `tail` iterator over the remaining characters.
     /// The context can be e.g. the k-mer size being iterated. When `context>1`, consecutive chunk overlap by `context-1` bases.
     fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S> + Clone, Self);
+
+    fn par_iter_bp_delayed(
+        self,
+        _context: usize,
+        _delay: usize,
+    ) -> (impl ExactSizeIterator<Item = (S, S)> + Clone, Self) {
+        unimplemented!();
+
+        #[allow(unreachable_code)]
+        (std::iter::empty(), self)
+    }
 
     /// Compare and return the LCP of the two sequences.
     fn cmp_lcp(&self, other: &Self) -> (std::cmp::Ordering, usize);
@@ -459,6 +470,102 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
             // Shift remaining characters to the right.
             upcoming_1 = upcoming_1 >> S::splat(2);
             chars
+        });
+
+        (
+            it,
+            PackedSeq {
+                seq: &self.seq[L * bytes_per_chunk..],
+                offset: 0,
+                len: self.len - L * n,
+            },
+        )
+    }
+
+    /// Iterate the basepairs in the sequence in 8 parallel streams, assuming values in `0..4`.
+    /// This version returns two streams, with one `delay` steps behind the other.
+    ///
+    /// The first `delay` iterations of the delayed character will return bogus (ie, implementation dependend).
+    #[inline(always)]
+    fn par_iter_bp_delayed(
+        self,
+        context: usize,
+        delay: usize,
+    ) -> (impl ExactSizeIterator<Item = (S, S)> + Clone, Self) {
+        #[cfg(target_endian = "big")]
+        panic!("Big endian architectures are not supported.");
+
+        let this = self.normalize();
+        assert_eq!(
+            this.offset % 4,
+            0,
+            "Non-byte offsets are not yet supported."
+        );
+        assert!(
+            delay > 0,
+            "A delay of 0 is not supported (but easily could be, if you need it)."
+        );
+
+        let num_kmers = this.len.saturating_sub(context - 1);
+        let n = (num_kmers / L) / 4 * 4;
+        let bytes_per_chunk = n / 4;
+
+        let base_ptr = this.seq.as_ptr();
+        let offsets_lanes_0_4: u64x4 = from_fn(|l| (l * bytes_per_chunk) as u64).into();
+        let offsets_lanes_4_8: u64x4 = from_fn(|l| ((4 + l) * bytes_per_chunk) as u64).into();
+        let mut upcoming = S::ZERO;
+        let mut upcoming_d = S::ZERO;
+
+        // Even buf_len is nice to only have the write==buf_len check once.
+        let buf_len = delay.div_ceil(16).next_multiple_of(2);
+        let mut buf = vec![S::ZERO; buf_len];
+        let mut write_idx = 0;
+        // We compensate for the first delay/16 triggers of the check below that
+        // happen before the delay is actually reached.
+        let mut read_idx = (buf_len - delay.div_ceil(16)) % buf_len;
+
+        let it = (0..if num_kmers == 0 { 0 } else { n + context - 1 }).map(move |i| {
+            if i % 16 == delay % 16 {
+                unsafe { assert_unchecked(read_idx < buf.len()) };
+                upcoming_d = buf[read_idx];
+                read_idx += 1;
+                if read_idx == buf_len {
+                    read_idx = 0;
+                }
+            }
+            if i % 16 == 0 {
+                if i % 32 == 0 {
+                    // Read a u64 containing the next 8 characters.
+                    let idx_0_4 = offsets_lanes_0_4 + u64x4::splat((i / 4) as u64);
+                    let idx_4_8 = offsets_lanes_4_8 + u64x4::splat((i / 4) as u64);
+                    let u64_0_4: S = unsafe { transmute(intrinsics::gather(base_ptr, idx_0_4)) };
+                    let u64_4_8: S = unsafe { transmute(intrinsics::gather(base_ptr, idx_4_8)) };
+                    // Split into two vecs containing a u32 of 4 characters each.
+                    let (a, b) = intrinsics::deinterleave(u64_0_4, u64_4_8);
+                    unsafe { assert_unchecked(write_idx < buf.len()) };
+                    buf[write_idx] = a;
+                    upcoming = a;
+                    write_idx += 1;
+                    unsafe { assert_unchecked(write_idx < buf.len()) };
+                    buf[write_idx] = b;
+                    // write_idx will be incremented one more in the `else` below.
+                } else {
+                    // Move on to the next u32 containing 4 buffered characters.
+                    unsafe { assert_unchecked(write_idx < buf.len()) };
+                    upcoming = buf[write_idx];
+                    write_idx += 1;
+                    if write_idx == buf_len {
+                        write_idx = 0;
+                    }
+                }
+            }
+            // Extract the last 2 bits of each character.
+            let chars = upcoming & S::splat(0x03);
+            let chars_d = upcoming_d & S::splat(0x03);
+            // Shift remaining characters to the right.
+            upcoming = upcoming >> S::splat(2);
+            upcoming_d = upcoming_d >> S::splat(2);
+            (chars, chars_d)
         });
 
         (
