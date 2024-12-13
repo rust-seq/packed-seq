@@ -517,7 +517,9 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let mut upcoming_d = S::ZERO;
 
         // Even buf_len is nice to only have the write==buf_len check once.
-        let buf_len = delay.div_ceil(16).next_multiple_of(2);
+        // We also make it the next power of 2, for faster modulo operations.
+        let buf_len = delay.div_ceil(16).next_multiple_of(2).next_power_of_two();
+        let buf_mask = buf_len - 1;
         let mut buf = vec![S::ZERO; buf_len];
         let mut write_idx = 0;
         // We compensate for the first delay/16 triggers of the check below that
@@ -529,9 +531,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                 unsafe { assert_unchecked(read_idx < buf.len()) };
                 upcoming_d = buf[read_idx];
                 read_idx += 1;
-                if read_idx == buf_len {
-                    read_idx = 0;
-                }
+                read_idx &= buf_mask;
             }
             if i % 16 == 0 {
                 if i % 32 == 0 {
@@ -554,9 +554,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                     unsafe { assert_unchecked(write_idx < buf.len()) };
                     upcoming = buf[write_idx];
                     write_idx += 1;
-                    if write_idx == buf_len {
-                        write_idx = 0;
-                    }
+                    write_idx &= buf_mask;
                 }
             }
             // Extract the last 2 bits of each character.
