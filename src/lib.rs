@@ -79,6 +79,18 @@ pub trait Seq<'s>: Copy + Eq + Ord {
         (std::iter::empty(), self)
     }
 
+    fn par_iter_bp_delayed_2(
+        self,
+        _context: usize,
+        _delay1: usize,
+        _delay2: usize,
+    ) -> (impl ExactSizeIterator<Item = (S, S, S)> + Clone, Self) {
+        unimplemented!();
+
+        #[allow(unreachable_code)]
+        (std::iter::empty(), self)
+    }
+
     /// Compare and return the LCP of the two sequences.
     fn cmp_lcp(&self, other: &Self) -> (std::cmp::Ordering, usize);
 }
@@ -564,6 +576,108 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
             upcoming = upcoming >> S::splat(2);
             upcoming_d = upcoming_d >> S::splat(2);
             (chars, chars_d)
+        });
+
+        (
+            it,
+            PackedSeq {
+                seq: &self.seq[L * bytes_per_chunk..],
+                offset: 0,
+                len: self.len - L * n,
+            },
+        )
+    }
+
+    /// Delay1 must be smaller than delay2.
+    #[inline(always)]
+    fn par_iter_bp_delayed_2(
+        self,
+        context: usize,
+        delay1: usize,
+        delay2: usize,
+    ) -> (impl ExactSizeIterator<Item = (S, S, S)> + Clone, Self) {
+        #[cfg(target_endian = "big")]
+        panic!("Big endian architectures are not supported.");
+
+        let this = self.normalize();
+        assert_eq!(
+            this.offset % 4,
+            0,
+            "Non-byte offsets are not yet supported."
+        );
+        assert!(
+            0 < delay1,
+            "A delay of 0 is not supported (but easily could be, if you need it)."
+        );
+        assert!(delay1 < delay2, "Delay1 must be smaller than delay2.");
+
+        let num_kmers = this.len.saturating_sub(context - 1);
+        let n = (num_kmers / L) / 4 * 4;
+        let bytes_per_chunk = n / 4;
+
+        let base_ptr = this.seq.as_ptr();
+        let offsets_lanes_0_4: u64x4 = from_fn(|l| (l * bytes_per_chunk) as u64).into();
+        let offsets_lanes_4_8: u64x4 = from_fn(|l| ((4 + l) * bytes_per_chunk) as u64).into();
+        let mut upcoming = S::ZERO;
+        let mut upcoming_d1 = S::ZERO;
+        let mut upcoming_d2 = S::ZERO;
+
+        // Even buf_len is nice to only have the write==buf_len check once.
+        let buf_len = delay2.div_ceil(16).next_multiple_of(2).next_power_of_two();
+        let buf_mask = buf_len - 1;
+        let mut buf = vec![S::ZERO; buf_len];
+        let mut write_idx = 0;
+        // We compensate for the first delay/16 triggers of the check below that
+        // happen before the delay is actually reached.
+        let mut read_idx1 = (buf_len - delay1.div_ceil(16)) % buf_len;
+        let mut read_idx2 = (buf_len - delay2.div_ceil(16)) % buf_len;
+
+        let it = (0..if num_kmers == 0 { 0 } else { n + context - 1 }).map(move |i| {
+            if i % 16 == delay1 % 16 {
+                unsafe { assert_unchecked(read_idx1 < buf.len()) };
+                upcoming_d1 = buf[read_idx1];
+                read_idx1 += 1;
+                read_idx1 &= buf_mask;
+            }
+            if i % 16 == delay2 % 16 {
+                unsafe { assert_unchecked(read_idx2 < buf.len()) };
+                upcoming_d2 = buf[read_idx2];
+                read_idx2 += 1;
+                read_idx2 &= buf_mask;
+            }
+            if i % 16 == 0 {
+                if i % 32 == 0 {
+                    // Read a u64 containing the next 8 characters.
+                    let idx_0_4 = offsets_lanes_0_4 + u64x4::splat((i / 4) as u64);
+                    let idx_4_8 = offsets_lanes_4_8 + u64x4::splat((i / 4) as u64);
+                    let u64_0_4: S = unsafe { transmute(intrinsics::gather(base_ptr, idx_0_4)) };
+                    let u64_4_8: S = unsafe { transmute(intrinsics::gather(base_ptr, idx_4_8)) };
+                    // Split into two vecs containing a u32 of 4 characters each.
+                    let (a, b) = intrinsics::deinterleave(u64_0_4, u64_4_8);
+                    unsafe { assert_unchecked(write_idx < buf.len()) };
+                    buf[write_idx] = a;
+                    upcoming = a;
+                    write_idx += 1;
+                    unsafe { assert_unchecked(write_idx < buf.len()) };
+                    buf[write_idx] = b;
+                    // write_idx will be incremented one more in the `else` below.
+                } else {
+                    // Move on to the next u32 containing 4 buffered characters.
+                    unsafe { assert_unchecked(write_idx < buf.len()) };
+                    upcoming = buf[write_idx];
+                    write_idx += 1;
+                    write_idx &= buf_mask;
+                }
+            }
+            // Extract the last 2 bits of each character.
+            let chars = upcoming & S::splat(0x03);
+            let chars_d1 = upcoming_d1 & S::splat(0x03);
+            let chars_d2 = upcoming_d2 & S::splat(0x03);
+            // Shift remaining characters to the right.
+            upcoming = upcoming >> S::splat(2);
+            upcoming_d1 = upcoming_d1 >> S::splat(2);
+            upcoming_d2 = upcoming_d2 >> S::splat(2);
+            (chars, chars_d1, chars_d2)
         });
 
         (
