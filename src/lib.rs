@@ -513,10 +513,6 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
             0,
             "Non-byte offsets are not yet supported."
         );
-        assert!(
-            delay > 0,
-            "A delay of 0 is not supported (but easily could be, if you need it)."
-        );
 
         let num_kmers = this.len.saturating_sub(context - 1);
         let n = (num_kmers / L) / 4 * 4;
@@ -530,21 +526,15 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
 
         // Even buf_len is nice to only have the write==buf_len check once.
         // We also make it the next power of 2, for faster modulo operations.
-        let buf_len = delay.div_ceil(16).next_multiple_of(2).next_power_of_two();
+        let buf_len = delay.div_ceil(16).next_power_of_two().max(2);
         let buf_mask = buf_len - 1;
         let mut buf = vec![S::ZERO; buf_len];
         let mut write_idx = 0;
         // We compensate for the first delay/16 triggers of the check below that
         // happen before the delay is actually reached.
-        let mut read_idx = (buf_len - delay.div_ceil(16)) % buf_len;
+        let mut read_idx = (buf_len - delay / 16) % buf_len;
 
         let it = (0..if num_kmers == 0 { 0 } else { n + context - 1 }).map(move |i| {
-            if i % 16 == delay % 16 {
-                unsafe { assert_unchecked(read_idx < buf.len()) };
-                upcoming_d = buf[read_idx];
-                read_idx += 1;
-                read_idx &= buf_mask;
-            }
             if i % 16 == 0 {
                 if i % 32 == 0 {
                     // Read a u64 containing the next 8 characters.
@@ -568,6 +558,12 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                     write_idx += 1;
                     write_idx &= buf_mask;
                 }
+            }
+            if i % 16 == delay % 16 {
+                unsafe { assert_unchecked(read_idx < buf.len()) };
+                upcoming_d = buf[read_idx];
+                read_idx += 1;
+                read_idx &= buf_mask;
             }
             // Extract the last 2 bits of each character.
             let chars = upcoming & S::splat(0x03);
@@ -605,11 +601,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
             0,
             "Non-byte offsets are not yet supported."
         );
-        assert!(
-            0 < delay1,
-            "A delay of 0 is not supported (but easily could be, if you need it)."
-        );
-        assert!(delay1 < delay2, "Delay1 must be smaller than delay2.");
+        assert!(delay1 <= delay2, "Delay1 must be at most delay2.");
 
         let num_kmers = this.len.saturating_sub(context - 1);
         let n = (num_kmers / L) / 4 * 4;
@@ -623,28 +615,16 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let mut upcoming_d2 = S::ZERO;
 
         // Even buf_len is nice to only have the write==buf_len check once.
-        let buf_len = delay2.div_ceil(16).next_multiple_of(2).next_power_of_two();
+        let buf_len = delay2.div_ceil(16).next_power_of_two().max(2);
         let buf_mask = buf_len - 1;
         let mut buf = vec![S::ZERO; buf_len];
         let mut write_idx = 0;
         // We compensate for the first delay/16 triggers of the check below that
         // happen before the delay is actually reached.
-        let mut read_idx1 = (buf_len - delay1.div_ceil(16)) % buf_len;
-        let mut read_idx2 = (buf_len - delay2.div_ceil(16)) % buf_len;
+        let mut read_idx1 = (buf_len - delay1 / 16) % buf_len;
+        let mut read_idx2 = (buf_len - delay2 / 16) % buf_len;
 
         let it = (0..if num_kmers == 0 { 0 } else { n + context - 1 }).map(move |i| {
-            if i % 16 == delay1 % 16 {
-                unsafe { assert_unchecked(read_idx1 < buf.len()) };
-                upcoming_d1 = buf[read_idx1];
-                read_idx1 += 1;
-                read_idx1 &= buf_mask;
-            }
-            if i % 16 == delay2 % 16 {
-                unsafe { assert_unchecked(read_idx2 < buf.len()) };
-                upcoming_d2 = buf[read_idx2];
-                read_idx2 += 1;
-                read_idx2 &= buf_mask;
-            }
             if i % 16 == 0 {
                 if i % 32 == 0 {
                     // Read a u64 containing the next 8 characters.
@@ -668,6 +648,18 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                     write_idx += 1;
                     write_idx &= buf_mask;
                 }
+            }
+            if i % 16 == delay1 % 16 {
+                unsafe { assert_unchecked(read_idx1 < buf.len()) };
+                upcoming_d1 = buf[read_idx1];
+                read_idx1 += 1;
+                read_idx1 &= buf_mask;
+            }
+            if i % 16 == delay2 % 16 {
+                unsafe { assert_unchecked(read_idx2 < buf.len()) };
+                upcoming_d2 = buf[read_idx2];
+                read_idx2 += 1;
+                read_idx2 &= buf_mask;
             }
             // Extract the last 2 bits of each character.
             let chars = upcoming & S::splat(0x03);
@@ -901,6 +893,8 @@ impl SeqVec for PackedSeqVec {
 
 #[cfg(test)]
 mod test {
+    use wide::u32x8;
+
     use super::*;
 
     fn pack_naive(seq: &[u8]) -> (Vec<u8>, usize) {
@@ -988,5 +982,75 @@ mod test {
                 }
             }
         }
+    }
+
+    #[test]
+    fn par_iter_bp_delayed0() {
+        let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
+        let (head, tail) = s.as_slice().par_iter_bp_delayed(1, 0);
+        let head = head.collect::<Vec<_>>();
+        let tail = tail.iter_bp().collect::<Vec<_>>();
+        fn f(x: &[u8; 8], y: &[u8; 8]) -> (u32x8, u32x8) {
+            let x = x.map(|x| pack_char(x) as u32);
+            let y = y.map(|x| pack_char(x) as u32);
+            (u32x8::from(x), u32x8::from(y))
+        }
+        assert_eq!(
+            head,
+            vec![
+                f(b"AAGACGAA", b"AAGACGAA"),
+                f(b"CAGACTAA", b"CAGACTAA"),
+                f(b"GCTAGTAA", b"GCTAGTAA"),
+                f(b"TCTCGTAA", b"TCTCGTAA"),
+            ]
+        );
+        assert_eq!(tail, vec![0, 1, 3, 2]);
+    }
+
+    #[test]
+    fn par_iter_bp_delayed1() {
+        let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
+        let (head, tail) = s.as_slice().par_iter_bp_delayed(1, 1);
+        let head = head.collect::<Vec<_>>();
+        let tail = tail.iter_bp().collect::<Vec<_>>();
+        fn f(x: &[u8; 8], y: &[u8; 8]) -> (u32x8, u32x8) {
+            let x = x.map(|x| pack_char(x) as u32);
+            let y = y.map(|x| pack_char(x) as u32);
+            (u32x8::from(x), u32x8::from(y))
+        }
+        assert_eq!(
+            head,
+            vec![
+                f(b"AAGACGAA", b"AAAAAAAA"),
+                f(b"CAGACTAA", b"AAGACGAA"),
+                f(b"GCTAGTAA", b"CAGACTAA"),
+                f(b"TCTCGTAA", b"GCTAGTAA"),
+            ]
+        );
+        assert_eq!(tail, vec![0, 1, 3, 2]);
+    }
+
+    #[test]
+    fn par_iter_bp_delayed01() {
+        let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
+        let (head, tail) = s.as_slice().par_iter_bp_delayed_2(1, 0, 1);
+        let head = head.collect::<Vec<_>>();
+        let tail = tail.iter_bp().collect::<Vec<_>>();
+        fn f(x: &[u8; 8], y: &[u8; 8], z: &[u8; 8]) -> (u32x8, u32x8, u32x8) {
+            let x = x.map(|x| pack_char(x) as u32);
+            let y = y.map(|x| pack_char(x) as u32);
+            let z = z.map(|x| pack_char(x) as u32);
+            (u32x8::from(x), u32x8::from(y), u32x8::from(z))
+        }
+        assert_eq!(
+            head,
+            vec![
+                f(b"AAGACGAA", b"AAGACGAA", b"AAAAAAAA"),
+                f(b"CAGACTAA", b"CAGACTAA", b"AAGACGAA"),
+                f(b"GCTAGTAA", b"GCTAGTAA", b"CAGACTAA"),
+                f(b"TCTCGTAA", b"TCTCGTAA", b"GCTAGTAA"),
+            ]
+        );
+        assert_eq!(tail, vec![0, 1, 3, 2]);
     }
 }
