@@ -234,16 +234,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2")))]
         {
             for (i, &base) in self.0.iter().enumerate() {
-                val |= match base {
-                    b'a' | b'A' => 0,
-                    b'c' | b'C' => 1,
-                    b'g' | b'G' => 3,
-                    b't' | b'T' => 2,
-                    _ => panic!(
-                    "Unexpected character '{}' with ASCII value {base}. Expected one of ACTGactg.",
-                    base as char
-                ),
-                } << (i * 2);
+                val |= pack_char(base) << (i * 2);
             }
         }
 
@@ -292,13 +283,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         }
 
         #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2")))]
-        self.0.iter().map(|base| match base {
-            b'a' | b'A' => 0,
-            b'c' | b'C' => 1,
-            b'g' | b'G' => 3,
-            b't' | b'T' => 2,
-            _ => panic!(),
-        })
+        self.0.iter().map(pack_char)
     }
 
     /// Iterate the basepairs in the sequence in 8 parallel streams, assuming values in `0..4`.
@@ -351,6 +336,21 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
             }
         }
         (self.len().cmp(&other.len()), self.len().min(other.len()))
+    }
+}
+
+// ============================= PACKED ================================
+
+fn pack_char(base: u8) -> u8 {
+    match base {
+        b'a' | b'A' => 0,
+        b'c' | b'C' => 1,
+        b'g' | b'G' => 3,
+        b't' | b'T' => 2,
+        _ => panic!(
+            "Unexpected character '{}' with ASCII value {base}. Expected one of ACTGactg.",
+            base as char
+        ),
     }
 }
 
@@ -870,13 +870,7 @@ impl SeqVec for PackedSeqVec {
 
         let mut packed_byte = 0;
         for &base in &seq[last..] {
-            packed_byte |= match base {
-                b'a' | b'A' => 0,
-                b'c' | b'C' => 1,
-                b'g' | b'G' => 3,
-                b't' | b'T' => 2,
-                _ => panic!(),
-            } << ((self.len % 4) * 2);
+            packed_byte |= pack_char(base) << ((self.len % 4) * 2);
             self.len += 1;
             if self.len % 4 == 0 {
                 self.seq.push(packed_byte);
@@ -914,13 +908,7 @@ mod test {
         let mut packed_len = 0;
         let mut packed = vec![];
         for &base in seq {
-            packed_byte |= match base {
-                b'a' | b'A' => 0,
-                b'c' | b'C' => 1,
-                b'g' | b'G' => 3,
-                b't' | b'T' => 2,
-                _ => panic!(),
-            } << ((packed_len % 4) * 2);
+            packed_byte |= pack_char(base) << ((packed_len % 4) * 2);
             packed_len += 1;
             if packed_len % 4 == 0 {
                 packed.push(packed_byte);
