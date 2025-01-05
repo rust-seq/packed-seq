@@ -526,7 +526,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
 
         // Even buf_len is nice to only have the write==buf_len check once.
         // We also make it the next power of 2, for faster modulo operations.
-        let buf_len = delay.div_ceil(16).next_power_of_two().max(2);
+        let buf_len = (delay / 16 + 2).next_power_of_two();
         let buf_mask = buf_len - 1;
         let mut buf = vec![S::ZERO; buf_len];
         let mut write_idx = 0;
@@ -615,7 +615,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let mut upcoming_d2 = S::ZERO;
 
         // Even buf_len is nice to only have the write==buf_len check once.
-        let buf_len = delay2.div_ceil(16).next_power_of_two().max(2);
+        let buf_len = (delay2 / 16 + 2).next_power_of_two();
         let buf_mask = buf_len - 1;
         let mut buf = vec![S::ZERO; buf_len];
         let mut write_idx = 0;
@@ -1063,6 +1063,40 @@ mod test {
             ]
         );
         assert_eq!(tail, vec![0, 1, 3, 2]);
+    }
+
+    #[test]
+    fn par_iter_bp_delayed_large() {
+        let seq = AsciiSeqVec::random(48);
+        eprintln!("SEQ: {:?}", seq.seq);
+        let s = PackedSeqVec::from_ascii(&seq.seq);
+        let delay = 16;
+        let (head, _tail) = s.as_slice().par_iter_bp_delayed(17, delay);
+        let head = head.collect::<Vec<_>>();
+        fn f(x: &[u8; 8], y: &[u8; 8]) -> (u32x8, u32x8) {
+            let x = x.map(|x| pack_char(x) as u32);
+            let y = y.map(|x| pack_char(x) as u32);
+            (u32x8::from(x), u32x8::from(y))
+        }
+        let stride = 4;
+        let len = head.len();
+        assert_eq!(
+            head,
+            (0..len)
+                .map(|i| {
+                    f(
+                        &from_fn(|j| seq.seq[i + stride * j]),
+                        &from_fn(|j| {
+                            if i < delay {
+                                b'A'
+                            } else {
+                                seq.seq[i + stride * j - delay]
+                            }
+                        }),
+                    )
+                })
+                .collect::<Vec<_>>()
+        );
     }
 
     #[test]
