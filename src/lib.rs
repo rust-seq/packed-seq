@@ -353,6 +353,18 @@ pub fn pack_char(base: u8) -> u8 {
         ),
     }
 }
+pub fn complement_char(base: u8) -> u8 {
+    match base {
+        b'A' => b'T',
+        b'C' => b'G',
+        b'G' => b'C',
+        b'T' => b'A',
+        _ => panic!(
+            "Unexpected character '{}' with ASCII value {base}. Expected one of ACTGactg.",
+            base as char
+        ),
+    }
+}
 
 impl<'s> PackedSeq<'s> {
     /// Shrink `seq` to only just cover the data.
