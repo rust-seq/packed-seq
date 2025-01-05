@@ -341,7 +341,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
 
 // ============================= PACKED ================================
 
-fn pack_char(base: u8) -> u8 {
+pub fn pack_char(base: u8) -> u8 {
     match base {
         b'a' | b'A' => 0,
         b'c' | b'C' => 1,
@@ -930,8 +930,29 @@ mod test {
     }
 
     #[test]
+    fn pack_via_ascii() {
+        for n in 0..=128 {
+            let mut rng = rand::thread_rng();
+            let seq: Vec<_> = (0..n)
+                .map(|_| b"ACGTacgt"[rng.gen::<u8>() as usize % 8])
+                .collect();
+            let ascii_seq = AsciiSeqVec::from_ascii(&seq);
+            let (packed_1, len1) = pack_naive(&seq);
+            let packed_2 = PackedSeqVec::from_ascii(&ascii_seq.seq);
+            assert_eq!(len1, packed_2.len);
+            assert_eq!(packed_1, packed_2.seq);
+        }
+    }
+
+    #[test]
     fn pack_word() {
         let packed = PackedSeqVec::from_ascii(b"ACGTACGTACGTACGTACGTACGTACGT");
+        let slice = packed.slice(0..1);
+        assert_eq!(slice.to_word(), 0b00000000);
+        let slice = packed.slice(0..2);
+        assert_eq!(slice.to_word(), 0b00000100);
+        let slice = packed.slice(0..3);
+        assert_eq!(slice.to_word(), 0b00110100);
         let slice = packed.slice(0..4);
         assert_eq!(slice.to_word(), 0b10110100);
         let slice = packed.slice(0..8);
@@ -981,6 +1002,20 @@ mod test {
                     }
                 }
             }
+        }
+    }
+
+    #[test]
+    fn iter_bp() {
+        let seq = b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT";
+        for len in 0..=seq.len() {
+            let ascii = AsciiSeqVec::from_ascii(&seq[..len]);
+            let packed = PackedSeqVec::from_ascii(&seq[..len]);
+            eprintln!("ascii {ascii:?}");
+            eprintln!("packed {packed:?}");
+            let ascii = ascii.as_slice().iter_bp().collect::<Vec<_>>();
+            let packed = packed.as_slice().iter_bp().collect::<Vec<_>>();
+            assert_eq!(ascii, packed);
         }
     }
 
