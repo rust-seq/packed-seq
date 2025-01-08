@@ -234,7 +234,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2")))]
         {
             for (i, &base) in self.0.iter().enumerate() {
-                val |= pack_char(base) << (i * 2);
+                val |= (pack_char(base) as u64) << (i * 2);
             }
         }
 
@@ -283,7 +283,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         }
 
         #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2")))]
-        self.0.iter().map(pack_char)
+        self.0.iter().copied().map(pack_char)
     }
 
     /// Iterate the basepairs in the sequence in 8 parallel streams, assuming values in `0..4`.
