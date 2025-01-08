@@ -353,6 +353,12 @@ pub fn pack_char(base: u8) -> u8 {
         ),
     }
 }
+
+pub fn unpack(base: u8) -> u8 {
+    assert!(base < 4, "Base {base} is not <4.");
+    b"ACTG"[base as usize]
+}
+
 pub fn complement_char(base: u8) -> u8 {
     match base {
         b'A' => b'T',
@@ -377,6 +383,10 @@ impl<'s> PackedSeq<'s> {
             offset: self.offset % 4,
             len: self.len,
         }
+    }
+
+    pub fn unpack(&self) -> Vec<u8> {
+        self.iter_bp().map(unpack).collect()
     }
 }
 
