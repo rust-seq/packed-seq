@@ -43,6 +43,9 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     /// The length of the sequence in bp.
     fn len(&self) -> usize;
 
+    /// Get the packed character at the given index.
+    fn get(&self, _index: usize) -> u8;
+
     /// Get the ASCII character at the given index, _without_ packing it.
     /// Not implemented for packed data.
     fn get_ascii(&self, _index: usize) -> u8 {
@@ -202,6 +205,11 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
     }
 
     #[inline(always)]
+    fn get(&self, index: usize) -> u8 {
+        pack_char(self.0[index])
+    }
+
+    #[inline(always)]
     fn get_ascii(&self, index: usize) -> u8 {
         self.0[index]
     }
@@ -355,7 +363,7 @@ pub fn pack_char(base: u8) -> u8 {
 }
 
 pub fn unpack(base: u8) -> u8 {
-    assert!(base < 4, "Base {base} is not <4.");
+    debug_assert!(base < 4, "Base {base} is not <4.");
     b"ACTG"[base as usize]
 }
 
@@ -406,6 +414,19 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
     #[inline(always)]
     fn len(&self) -> usize {
         self.len
+    }
+
+    #[inline(always)]
+    fn get(&self, index: usize) -> u8 {
+        let offset = self.offset + index;
+        let idx = offset / 4;
+        let offset = offset % 4;
+        unsafe { (*self.seq.get_unchecked(idx) >> (2 * offset)) & 3 }
+    }
+
+    #[inline(always)]
+    fn get_ascii(&self, index: usize) -> u8 {
+        unpack(self.get(index))
     }
 
     #[inline(always)]
@@ -1143,5 +1164,14 @@ mod test {
             ]
         );
         assert_eq!(tail, vec![0, 1, 3, 2]);
+    }
+
+    #[test]
+    fn get() {
+        let n = 1000;
+        let s = PackedSeqVec::random(n);
+        let iter_bp = s.as_slice().iter_bp().collect::<Vec<_>>();
+        let get = (0..n).map(|i| s.as_slice().get(i)).collect::<Vec<_>>();
+        assert_eq!(iter_bp, get);
     }
 }
