@@ -13,7 +13,4 @@ mem_dbg = "0.2.4"
 pyo3 = { version = "0.22.2", features = ["extension-module"], optional = true }
 
 [features]
-# Enable python bindings
 python-bindings = ['dep:pyo3']
-
-default = ['python-bindings']
