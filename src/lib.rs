@@ -367,17 +367,18 @@ pub fn unpack(base: u8) -> u8 {
     b"ACTG"[base as usize]
 }
 
-pub fn complement_char(base: u8) -> u8 {
+pub const fn complement_char(base: u8) -> u8 {
     match base {
         b'A' => b'T',
         b'C' => b'G',
         b'G' => b'C',
         b'T' => b'A',
-        _ => panic!(
-            "Unexpected character '{}' with ASCII value {base}. Expected one of ACTGactg.",
-            base as char
-        ),
+        _ => panic!("Unexpected character. Expected one of ACTGactg.",),
     }
+}
+
+pub const fn complement_base(base: u8) -> u8 {
+    base ^ 2
 }
 
 impl<'s> PackedSeq<'s> {
