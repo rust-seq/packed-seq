@@ -502,8 +502,8 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let base_ptr = this.seq.as_ptr();
         let offsets_lanes_0_4: u64x4 = from_fn(|l| (l * bytes_per_chunk) as u64).into();
         let offsets_lanes_4_8: u64x4 = from_fn(|l| ((4 + l) * bytes_per_chunk) as u64).into();
-        let mut upcoming_1 = S::ZERO;
-        let mut upcoming_2 = S::ZERO;
+        let mut cur = S::ZERO;
+        let mut buf = S::ZERO;
 
         let it = (0..if num_kmers == 0 { 0 } else { n + context - 1 }).map(move |i| {
             if i % 16 == 0 {
@@ -514,16 +514,16 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                     let u64_0_4: S = unsafe { transmute(intrinsics::gather(base_ptr, idx_0_4)) };
                     let u64_4_8: S = unsafe { transmute(intrinsics::gather(base_ptr, idx_4_8)) };
                     // Split into two vecs containing a u32 of 4 characters each.
-                    (upcoming_1, upcoming_2) = intrinsics::deinterleave(u64_0_4, u64_4_8);
+                    (cur, buf) = intrinsics::deinterleave(u64_0_4, u64_4_8);
                 } else {
                     // Move on to the next u32 containing 4 buffered characters.
-                    upcoming_1 = upcoming_2;
+                    cur = buf;
                 }
             }
             // Extract the last 2 bits of each character.
-            let chars = upcoming_1 & S::splat(0x03);
+            let chars = cur & S::splat(0x03);
             // Shift remaining characters to the right.
-            upcoming_1 = upcoming_1 >> S::splat(2);
+            cur = cur >> S::splat(2);
             chars
         });
 
