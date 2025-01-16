@@ -16,7 +16,6 @@
 mod intrinsics;
 
 use core::{array::from_fn, mem::transmute};
-use epserde::{deser::DeserializeInner, ser::SerializeInner, Epserde};
 use mem_dbg::{MemDbg, MemSize};
 use rand::Rng;
 use std::{hint::assert_unchecked, ops::Range};
@@ -95,6 +94,21 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     fn cmp_lcp(&self, other: &Self) -> (std::cmp::Ordering, usize);
 }
 
+// Some hacky stuff to make conditional supertraits.
+cfg_if::cfg_if! {
+    if #[cfg(feature = "epserde")] {
+        pub use serde::{DeserializeInner, SerializeInner};
+    } else {
+        pub trait SerializeInner {}
+        pub trait DeserializeInner {}
+
+        impl SerializeInner for AsciiSeqVec {}
+        impl DeserializeInner for AsciiSeqVec {}
+        impl SerializeInner for PackedSeqVec {}
+        impl DeserializeInner for PackedSeqVec {}
+    }
+}
+
 pub trait SeqVec: Default + Sync + SerializeInner + DeserializeInner + MemSize + MemDbg {
     type Seq<'s>: Seq<'s>;
 
@@ -158,8 +172,9 @@ pub struct AsciiSeq<'s>(pub &'s [u8]);
 /// Other characters will be silently mapped into `[0, 4)`, or may cause panics.
 ///
 /// TODO: Should this be a strong type instead?
-#[derive(Clone, Debug, Default, Epserde, MemSize, MemDbg)]
-#[cfg_attr(feature = "python-bindings", pyo3::pyclass)]
+#[derive(Clone, Debug, Default, MemSize, MemDbg)]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
+#[cfg_attr(feature = "epserde", derive(epserde::Epserde))]
 pub struct AsciiSeqVec {
     pub seq: Vec<u8>,
     pub ranges: Vec<(usize, usize)>,
@@ -176,8 +191,9 @@ pub struct PackedSeq<'s> {
     pub len: usize,
 }
 
-#[derive(Clone, Debug, Default, Epserde, MemSize, MemDbg)]
-#[cfg_attr(feature = "python-bindings", pyo3::pyclass)]
+#[derive(Clone, Debug, Default, MemSize, MemDbg)]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
+#[cfg_attr(feature = "epserde", derive(epserde::Epserde))]
 pub struct PackedSeqVec {
     pub seq: Vec<u8>,
     pub len: usize,
