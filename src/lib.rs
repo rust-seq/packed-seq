@@ -44,9 +44,7 @@ pub trait Seq<'s>: Copy + Eq + Ord {
 
     /// Get the ASCII character at the given index, _without_ packing it.
     /// Not implemented for packed data.
-    fn get_ascii(&self, _index: usize) -> u8 {
-        unimplemented!()
-    }
+    fn get_ascii(&self, _index: usize) -> u8;
 
     /// Convert a short sequence (kmer) to a packed word.
     /// Panics if `self` is longer than 29 characters.
@@ -71,24 +69,14 @@ pub trait Seq<'s>: Copy + Eq + Ord {
         self,
         _context: usize,
         _delay: usize,
-    ) -> (impl ExactSizeIterator<Item = (S, S)> + Clone, Self) {
-        unimplemented!();
-
-        #[allow(unreachable_code)]
-        (std::iter::empty(), self)
-    }
+    ) -> (impl ExactSizeIterator<Item = (S, S)> + Clone, Self);
 
     fn par_iter_bp_delayed_2(
         self,
         _context: usize,
         _delay1: usize,
         _delay2: usize,
-    ) -> (impl ExactSizeIterator<Item = (S, S, S)> + Clone, Self) {
-        unimplemented!();
-
-        #[allow(unreachable_code)]
-        (std::iter::empty(), self)
-    }
+    ) -> (impl ExactSizeIterator<Item = (S, S, S)> + Clone, Self);
 
     /// Compare and return the LCP of the two sequences.
     fn cmp_lcp(&self, other: &Self) -> (std::cmp::Ordering, usize);
@@ -325,10 +313,12 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
                     let u64_4_8: S = unsafe { transmute(intrinsics::gather(base_ptr, idx_4_8)) };
                     // Split into two vecs containing a u32 of 4 characters each.
                     (upcoming_1, upcoming_2) = intrinsics::deinterleave(u64_0_4, u64_4_8);
-                    // TODO: Use packing to avoid needing two vectors?
+
+                    // Mask out the unneeded bits.
                     let mask = 0x06060606;
                     upcoming_1 &= S::splat(mask);
                     upcoming_2 &= S::splat(mask);
+                    // Shift down everything by 1, so the needed bits are in the lowest 2 positions.
                     upcoming_1 = upcoming_1 >> S::splat(1);
                     upcoming_2 = upcoming_2 >> S::splat(1);
                 } else {
@@ -341,6 +331,173 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
             // Shift remaining characters to the right.
             upcoming_1 = upcoming_1 >> S::splat(8);
             chars
+        });
+
+        (it, Self(&self.0[L * n..]))
+    }
+
+    #[inline(always)]
+    fn par_iter_bp_delayed(
+        self,
+        context: usize,
+        delay: usize,
+    ) -> (impl ExactSizeIterator<Item = (S, S)> + Clone, Self) {
+        let num_kmers = self.len().saturating_sub(context - 1);
+        let n = num_kmers / L;
+
+        let base_ptr = self.0.as_ptr();
+        let offsets_lanes_0_4: u64x4 = from_fn(|l| (l * n) as u64).into();
+        let offsets_lanes_4_8: u64x4 = from_fn(|l| ((4 + l) * n) as u64).into();
+
+        let mut upcoming = S::ZERO;
+        let mut upcoming_d = S::ZERO;
+
+        // Even buf_len is nice to only have the write==buf_len check once.
+        // We also make it the next power of 2, for faster modulo operations.
+        // delay/4: number of bp in a u32.
+        let buf_len = (delay / 4 + 2).next_power_of_two();
+        let buf_mask = buf_len - 1;
+        let mut buf = vec![S::ZERO; buf_len];
+        let mut write_idx = 0;
+        // We compensate for the first delay/16 triggers of the check below that
+        // happen before the delay is actually reached.
+        let mut read_idx = (buf_len - delay / 4) % buf_len;
+
+        let it = (0..if num_kmers == 0 { 0 } else { n + context - 1 }).map(move |i| {
+            if i % 4 == 0 {
+                if i % 8 == 0 {
+                    // Read a u64 containing the next 8 characters.
+                    let idx_0_4 = offsets_lanes_0_4 + u64x4::splat(i as u64);
+                    let idx_4_8 = offsets_lanes_4_8 + u64x4::splat(i as u64);
+                    let u64_0_4: S = unsafe { transmute(intrinsics::gather(base_ptr, idx_0_4)) };
+                    let u64_4_8: S = unsafe { transmute(intrinsics::gather(base_ptr, idx_4_8)) };
+                    // Split into two vecs containing a u32 of 4 characters each.
+                    let (mut a, mut b) = intrinsics::deinterleave(u64_0_4, u64_4_8);
+                    // Mask out the unneeded bits.
+                    let mask = 0x06060606;
+                    a &= S::splat(mask);
+                    b &= S::splat(mask);
+                    // Shift down everything by 1, so the needed bits are in the lowest 2 positions.
+                    a = a >> S::splat(1);
+                    b = b >> S::splat(1);
+                    unsafe { assert_unchecked(write_idx < buf.len()) };
+                    buf[write_idx] = a;
+                    upcoming = a;
+                    write_idx += 1;
+                    unsafe { assert_unchecked(write_idx < buf.len()) };
+                    buf[write_idx] = b;
+                    // write_idx will be incremented one more in the `else` below.
+                } else {
+                    // Move on to the next u32 containing 4 buffered characters.
+                    unsafe { assert_unchecked(write_idx < buf.len()) };
+                    upcoming = buf[write_idx];
+                    write_idx += 1;
+                    write_idx &= buf_mask;
+                }
+            }
+            if i % 4 == delay % 4 {
+                unsafe { assert_unchecked(read_idx < buf.len()) };
+                upcoming_d = buf[read_idx];
+                read_idx += 1;
+                read_idx &= buf_mask;
+            }
+            // Extract the last 2 bits of each character.
+            let chars = upcoming & S::splat(0x03);
+            let chars_d = upcoming_d & S::splat(0x03);
+            // Shift remaining characters to the right.
+            upcoming = upcoming >> S::splat(8);
+            upcoming_d = upcoming_d >> S::splat(8);
+            (chars, chars_d)
+        });
+
+        (it, Self(&self.0[L * n..]))
+    }
+
+    #[inline(always)]
+    fn par_iter_bp_delayed_2(
+        self,
+        context: usize,
+        delay1: usize,
+        delay2: usize,
+    ) -> (impl ExactSizeIterator<Item = (S, S, S)> + Clone, Self) {
+        assert!(delay1 <= delay2, "Delay1 must be at most delay2.");
+
+        let num_kmers = self.len().saturating_sub(context - 1);
+        let n = num_kmers / L;
+
+        let base_ptr = self.0.as_ptr();
+        let offsets_lanes_0_4: u64x4 = from_fn(|l| (l * n) as u64).into();
+        let offsets_lanes_4_8: u64x4 = from_fn(|l| ((4 + l) * n) as u64).into();
+
+        let mut upcoming = S::ZERO;
+        let mut upcoming_d1 = S::ZERO;
+        let mut upcoming_d2 = S::ZERO;
+
+        // Even buf_len is nice to only have the write==buf_len check once.
+        // We also make it the next power of 2, for faster modulo operations.
+        // delay/4: number of bp in a u32.
+        let buf_len = (delay2 / 4 + 2).next_power_of_two();
+        let buf_mask = buf_len - 1;
+        let mut buf = vec![S::ZERO; buf_len];
+        let mut write_idx = 0;
+        // We compensate for the first delay/16 triggers of the check below that
+        // happen before the delay is actually reached.
+        let mut read_idx1 = (buf_len - delay1 / 4) % buf_len;
+        let mut read_idx2 = (buf_len - delay2 / 4) % buf_len;
+
+        let it = (0..if num_kmers == 0 { 0 } else { n + context - 1 }).map(move |i| {
+            if i % 4 == 0 {
+                if i % 8 == 0 {
+                    // Read a u64 containing the next 8 characters.
+                    let idx_0_4 = offsets_lanes_0_4 + u64x4::splat(i as u64);
+                    let idx_4_8 = offsets_lanes_4_8 + u64x4::splat(i as u64);
+                    let u64_0_4: S = unsafe { transmute(intrinsics::gather(base_ptr, idx_0_4)) };
+                    let u64_4_8: S = unsafe { transmute(intrinsics::gather(base_ptr, idx_4_8)) };
+                    // Split into two vecs containing a u32 of 4 characters each.
+                    let (mut a, mut b) = intrinsics::deinterleave(u64_0_4, u64_4_8);
+                    // Mask out the unneeded bits.
+                    let mask = 0x06060606;
+                    a &= S::splat(mask);
+                    b &= S::splat(mask);
+                    // Shift down everything by 1, so the needed bits are in the lowest 2 positions.
+                    a = a >> S::splat(1);
+                    b = b >> S::splat(1);
+                    unsafe { assert_unchecked(write_idx < buf.len()) };
+                    buf[write_idx] = a;
+                    upcoming = a;
+                    write_idx += 1;
+                    unsafe { assert_unchecked(write_idx < buf.len()) };
+                    buf[write_idx] = b;
+                    // write_idx will be incremented one more in the `else` below.
+                } else {
+                    // Move on to the next u32 containing 4 buffered characters.
+                    unsafe { assert_unchecked(write_idx < buf.len()) };
+                    upcoming = buf[write_idx];
+                    write_idx += 1;
+                    write_idx &= buf_mask;
+                }
+            }
+            if i % 4 == delay1 % 4 {
+                unsafe { assert_unchecked(read_idx1 < buf.len()) };
+                upcoming_d1 = buf[read_idx1];
+                read_idx1 += 1;
+                read_idx1 &= buf_mask;
+            }
+            if i % 4 == delay2 % 4 {
+                unsafe { assert_unchecked(read_idx2 < buf.len()) };
+                upcoming_d2 = buf[read_idx2];
+                read_idx2 += 1;
+                read_idx2 &= buf_mask;
+            }
+            // Extract the last 2 bits of each character.
+            let chars = upcoming & S::splat(0x03);
+            let chars_d1 = upcoming_d1 & S::splat(0x03);
+            let chars_d2 = upcoming_d2 & S::splat(0x03);
+            // Shift remaining characters to the right.
+            upcoming = upcoming >> S::splat(8);
+            upcoming_d1 = upcoming_d1 >> S::splat(8);
+            upcoming_d2 = upcoming_d2 >> S::splat(8);
+            (chars, chars_d1, chars_d2)
         });
 
         (it, Self(&self.0[L * n..]))
@@ -541,7 +698,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
     /// Iterate the basepairs in the sequence in 8 parallel streams, assuming values in `0..4`.
     /// This version returns two streams, with one `delay` steps behind the other.
     ///
-    /// The first `delay` iterations of the delayed character will return bogus (ie, implementation dependend).
+    /// The first `delay` iterations of the delayed character will return 0.
     #[inline(always)]
     fn par_iter_bp_delayed(
         self,
@@ -570,6 +727,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
 
         // Even buf_len is nice to only have the write==buf_len check once.
         // We also make it the next power of 2, for faster modulo operations.
+        // delay/16: number of bp in a u32.
         let buf_len = (delay / 16 + 2).next_power_of_two();
         let buf_mask = buf_len - 1;
         let mut buf = vec![S::ZERO; buf_len];
