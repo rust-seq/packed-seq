@@ -13,6 +13,7 @@
 //!
 //! 1: https://github.com/Daniel-Liu-c0deb0t/cute-nucleotides/blob/master/src/n_to_bits.rs#L213
 
+mod ascii;
 mod ascii_seq;
 mod intrinsics;
 mod packed_seq;
@@ -95,6 +96,8 @@ cfg_if::cfg_if! {
         pub trait SerializeInner {}
         pub trait DeserializeInner {}
 
+        impl SerializeInner for Vec<u8> {}
+        impl DeserializeInner for Vec<u8> {}
         impl SerializeInner for AsciiSeqVec {}
         impl DeserializeInner for AsciiSeqVec {}
         impl SerializeInner for PackedSeqVec {}
@@ -152,17 +155,25 @@ pub trait SeqVec: Default + Sync + SerializeInner + DeserializeInner + MemSize +
 
 // ---------------- STRUCTS ----------------
 
-/// A `&[u8]` representing an ASCII sequence.
-/// Only supported characters are `ACGTacgt`.
-/// Other characters will be silently mapped into `[0, 4)`, or may cause panics.
+/// A `Vec<u8>` representing an ASCII-encoded DNA sequence of `ACGTacgt`.
+///
+/// Other characters will be mapped into `[0, 4)` via `(c>>1)&3`, or may cause panics.
+#[derive(Clone, Debug, Default, MemSize, MemDbg)]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
+#[cfg_attr(feature = "epserde", derive(epserde::Epserde))]
+pub struct AsciiVec {
+    pub seq: Vec<u8>,
+}
+
+/// A `&[u8]` representing an ASCII-encoded DNA sequence of `ACGTacgt`.
+///
+/// Other characters will be mapped into `[0, 4)` via `(c>>1)&3`, or may cause panics.
 #[derive(Copy, Clone, Debug, MemSize, MemDbg, PartialEq, Eq, PartialOrd, Ord)]
 pub struct AsciiSeq<'s>(pub &'s [u8]);
 
-/// An owned ASCII sequence.
-/// Only supported characters are `ACGTacgt`.
-/// Other characters will be silently mapped into `[0, 4)`, or may cause panics.
+/// A `Vec<u8>` representing an ASCII-encoded DNA sequence of `ACGTacgt`.
 ///
-/// TODO: Should this be a strong type instead?
+/// Other characters will be mapped into `[0, 4)` via `(c>>1)&3`, or may cause panics.
 #[derive(Clone, Debug, Default, MemSize, MemDbg)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[cfg_attr(feature = "epserde", derive(epserde::Epserde))]
