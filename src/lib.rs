@@ -39,8 +39,15 @@ pub const L: usize = 8;
 /// Currently supports `&[u8]`, where each `u8` must be in `0..4`, and the
 /// `PackedSeq` type that contains packed sequences.
 pub trait Seq<'s>: Copy + Eq + Ord {
+    /// Number of bases/characters per byte of memory.
     const BASES_PER_BYTE: usize;
+    /// Number of output bits of each character returned by `iter_bp` and variants.
+    const BITS_PER_CHAR: usize;
     type SeqVec: SeqVec;
+
+    fn bits_per_char(&self) -> usize {
+        Self::BITS_PER_CHAR
+    }
 
     /// The length of the sequence in bp.
     fn len(&self) -> usize;

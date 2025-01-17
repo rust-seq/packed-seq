@@ -20,6 +20,7 @@ impl<'s> PackedSeq<'s> {
 
 impl<'s> Seq<'s> for PackedSeq<'s> {
     const BASES_PER_BYTE: usize = 4;
+    const BITS_PER_CHAR: usize = 2;
     type SeqVec = PackedSeqVec;
 
     #[inline(always)]

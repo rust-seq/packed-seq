@@ -3,7 +3,10 @@ use super::*;
 /// Maps ASCII to `[0, 4)` on the fly.
 /// Prefer first packing into a `PackedSeqVec` for storage.
 impl<'s> Seq<'s> for AsciiSeq<'s> {
+    /// Each input byte stores a single character.
     const BASES_PER_BYTE: usize = 1;
+    /// But each output bp only takes 2 bits!
+    const BITS_PER_CHAR: usize = 2;
     type SeqVec = AsciiSeqVec;
 
     #[inline(always)]

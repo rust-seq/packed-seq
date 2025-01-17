@@ -4,6 +4,7 @@ use super::*;
 /// Prefer first packing into a `PackedSeqVec` for storage.
 impl<'s> Seq<'s> for &[u8] {
     const BASES_PER_BYTE: usize = 1;
+    const BITS_PER_CHAR: usize = 8;
     type SeqVec = Vec<u8>;
 
     #[inline(always)]
