@@ -115,7 +115,8 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let mut cur = S::ZERO;
         let mut buf = S::ZERO;
 
-        let it = (0..if num_kmers == 0 { 0 } else { n + context - 1 }).map(move |i| {
+        let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
+        let it = (0..par_len).map(move |i| {
             if i % 16 == 0 {
                 if i % 32 == 0 {
                     // Read a u64 containing the next 8 characters.
@@ -188,7 +189,8 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         // happen before the delay is actually reached.
         let mut read_idx = (buf_len - delay / 16) % buf_len;
 
-        let it = (0..if num_kmers == 0 { 0 } else { n + context - 1 }).map(move |i| {
+        let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
+        let it = (0..par_len).map(move |i| {
             if i % 16 == 0 {
                 if i % 32 == 0 {
                     // Read a u64 containing the next 8 characters.
@@ -278,7 +280,8 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let mut read_idx1 = (buf_len - delay1 / 16) % buf_len;
         let mut read_idx2 = (buf_len - delay2 / 16) % buf_len;
 
-        let it = (0..if num_kmers == 0 { 0 } else { n + context - 1 }).map(move |i| {
+        let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
+        let it = (0..par_len).map(move |i| {
             if i % 16 == 0 {
                 if i % 32 == 0 {
                     // Read a u64 containing the next 8 characters.

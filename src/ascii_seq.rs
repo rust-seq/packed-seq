@@ -112,7 +112,8 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         let mut upcoming_1 = S::ZERO;
         let mut upcoming_2 = S::ZERO;
 
-        let it = (0..if num_kmers == 0 { 0 } else { n + context - 1 }).map(move |i| {
+        let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
+        let it = (0..par_len).map(move |i| {
             if i % 4 == 0 {
                 if i % 8 == 0 {
                     // Read a u64 containing the next 8 characters.
@@ -172,7 +173,8 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         // happen before the delay is actually reached.
         let mut read_idx = (buf_len - delay / 4) % buf_len;
 
-        let it = (0..if num_kmers == 0 { 0 } else { n + context - 1 }).map(move |i| {
+        let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
+        let it = (0..par_len).map(move |i| {
             if i % 4 == 0 {
                 if i % 8 == 0 {
                     // Read a u64 containing the next 8 characters.
@@ -254,7 +256,8 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         let mut read_idx1 = (buf_len - delay1 / 4) % buf_len;
         let mut read_idx2 = (buf_len - delay2 / 4) % buf_len;
 
-        let it = (0..if num_kmers == 0 { 0 } else { n + context - 1 }).map(move |i| {
+        let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
+        let it = (0..par_len).map(move |i| {
             if i % 4 == 0 {
                 if i % 8 == 0 {
                     // Read a u64 containing the next 8 characters.
