@@ -55,7 +55,6 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         PackedSeqVec {
             seq: self.seq.to_vec(),
             len: self.len,
-            ranges: vec![(0, self.len)],
         }
     }
 
@@ -429,7 +428,6 @@ impl SeqVec for PackedSeqVec {
         let end = start + seq.len();
         self.seq.extend(seq.seq);
         self.len = 4 * self.seq.len();
-        self.ranges.push((start, end));
         start..end
     }
 
@@ -478,21 +476,12 @@ impl SeqVec for PackedSeqVec {
         if self.len % 4 != 0 {
             self.seq.push(packed_byte);
         }
-        self.ranges.push((start, start + len));
         start..start + len
-    }
-
-    fn ranges(&mut self) -> &mut Vec<(usize, usize)> {
-        &mut self.ranges
     }
 
     fn random(n: usize) -> Self {
         let mut rng = rand::thread_rng();
         let seq = (0..n.div_ceil(4)).map(|_| rng.gen::<u8>()).collect();
-        PackedSeqVec {
-            seq,
-            len: n,
-            ranges: vec![(0, n)],
-        }
+        PackedSeqVec { seq, len: n }
     }
 }

@@ -60,7 +60,6 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
     fn to_vec(&self) -> AsciiSeqVec {
         AsciiSeqVec {
             seq: self.0.to_vec(),
-            ranges: vec![(0, self.len())],
         }
     }
 
@@ -325,10 +324,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
 
 impl AsciiSeqVec {
     pub fn from_vec(seq: Vec<u8>) -> Self {
-        Self {
-            ranges: vec![(0, seq.len())],
-            seq,
-        }
+        Self { seq }
     }
 }
 
@@ -349,16 +345,11 @@ impl SeqVec for AsciiSeqVec {
         let end = start + seq.len();
         let range = start..end;
         self.seq.extend(seq.0);
-        self.ranges.push((start, end));
         range
     }
 
     fn push_ascii(&mut self, seq: &[u8]) -> Range<usize> {
         self.push_seq(AsciiSeq(seq))
-    }
-
-    fn ranges(&mut self) -> &mut Vec<(usize, usize)> {
-        &mut self.ranges
     }
 
     fn random(n: usize) -> Self {
@@ -367,7 +358,6 @@ impl SeqVec for AsciiSeqVec {
             seq: (0..n)
                 .map(|_| b"ACGT"[rng.gen::<u8>() as usize % 4])
                 .collect(),
-            ranges: vec![(0, n)],
         }
     }
 }

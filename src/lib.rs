@@ -147,8 +147,6 @@ pub trait SeqVec: Default + Sync + SerializeInner + DeserializeInner + MemSize +
         seq
     }
 
-    fn ranges(&mut self) -> &mut Vec<(usize, usize)>;
-
     fn random(n: usize) -> Self;
 }
 
@@ -170,7 +168,6 @@ pub struct AsciiSeq<'s>(pub &'s [u8]);
 #[cfg_attr(feature = "epserde", derive(epserde::Epserde))]
 pub struct AsciiSeqVec {
     pub seq: Vec<u8>,
-    pub ranges: Vec<(usize, usize)>,
 }
 
 /// A 2-bit packed sequence representation.
@@ -190,7 +187,6 @@ pub struct PackedSeq<'s> {
 pub struct PackedSeqVec {
     pub seq: Vec<u8>,
     pub len: usize,
-    pub ranges: Vec<(usize, usize)>,
 }
 
 // ============================= PACKED ================================
