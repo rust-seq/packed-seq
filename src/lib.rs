@@ -25,7 +25,7 @@ use core::{array::from_fn, mem::transmute};
 use mem_dbg::{MemDbg, MemSize};
 use rand::Rng;
 use std::{hint::assert_unchecked, ops::Range};
-use wide::u64x4;
+use wide::{u32x8, u64x4};
 
 /// A SIMD vector containing 8 u32s.
 pub use wide::u32x8 as S;
@@ -239,4 +239,8 @@ pub const fn complement_char(base: u8) -> u8 {
 
 pub const fn complement_base(base: u8) -> u8 {
     base ^ 2
+}
+
+pub fn complement_base_simd(base: u32x8) -> u32x8 {
+    base ^ u32x8::splat(2)
 }
