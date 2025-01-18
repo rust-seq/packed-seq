@@ -112,7 +112,9 @@ cfg_if::cfg_if! {
     }
 }
 
-pub trait SeqVec: Default + Sync + SerializeInner + DeserializeInner + MemSize + MemDbg {
+pub trait SeqVec:
+    Default + Sync + SerializeInner + DeserializeInner + MemSize + MemDbg + Clone + 'static
+{
     type Seq<'s>: Seq<'s>;
 
     fn as_slice(&self) -> Self::Seq<'_>;
