@@ -24,8 +24,8 @@ impl<'s> Seq<'s> for &[u8] {
 
     #[inline(always)]
     fn to_word(&self) -> usize {
-        assert!(self.len() <= usize::BITS as usize / 2 - 3);
-        let mask = usize::MAX >> (64 - 2 * self.len());
+        assert!(self.len() <= usize::BITS as usize / 8);
+        let mask = usize::MAX >> (64 - 8 * self.len());
         unsafe { (self.as_ptr() as *const usize).read_unaligned() & mask }
     }
 
