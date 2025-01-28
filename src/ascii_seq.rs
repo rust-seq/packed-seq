@@ -376,10 +376,10 @@ impl SeqVec for AsciiSeqVec {
     }
 
     fn random(n: usize) -> Self {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         Self {
             seq: (0..n)
-                .map(|_| b"ACGT"[rng.gen::<u8>() as usize % 4])
+                .map(|_| b"ACGT"[rng.random::<u8>() as usize % 4])
                 .collect(),
         }
     }

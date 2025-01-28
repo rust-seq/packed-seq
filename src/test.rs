@@ -23,9 +23,9 @@ fn pack_naive(seq: &[u8]) -> (Vec<u8>, usize) {
 #[test]
 fn pack() {
     for n in 0..=128 {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let seq: Vec<_> = (0..n)
-            .map(|_| b"ACGTacgt"[rng.gen::<u8>() as usize % 8])
+            .map(|_| b"ACGTacgt"[rng.random::<u8>() as usize % 8])
             .collect();
         let (packed_1, len1) = pack_naive(&seq);
         let packed_2 = PackedSeqVec::from_ascii(&seq);
@@ -37,9 +37,9 @@ fn pack() {
 #[test]
 fn pack_via_ascii() {
     for n in 0..=128 {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let seq: Vec<_> = (0..n)
-            .map(|_| b"ACGTacgt"[rng.gen::<u8>() as usize % 8])
+            .map(|_| b"ACGTacgt"[rng.random::<u8>() as usize % 8])
             .collect();
         let ascii_seq = AsciiSeqVec::from_ascii(&seq);
         let (packed_1, len1) = pack_naive(&seq);

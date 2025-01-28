@@ -543,8 +543,8 @@ impl SeqVec for PackedSeqVec {
     }
 
     fn random(n: usize) -> Self {
-        let mut rng = rand::thread_rng();
-        let seq = (0..n.div_ceil(4)).map(|_| rng.gen::<u8>()).collect();
+        let mut rng = rand::rng();
+        let seq = (0..n.div_ceil(4)).map(|_| rng.random::<u8>()).collect();
         PackedSeqVec { seq, len: n }
     }
 }
