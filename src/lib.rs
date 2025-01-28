@@ -21,6 +21,8 @@ mod intrinsics {
     pub use gather::gather;
 }
 
+mod traits;
+
 mod ascii;
 mod ascii_seq;
 mod packed_seq;
@@ -39,135 +41,7 @@ pub use wide::u32x8 as S;
 /// The number of lanes in `S`.
 pub const L: usize = 8;
 
-// ---------------- TRAITS ----------------
-
-/// Interface to sequences over a 2-bit alphabet.
-///
-/// Currently supports `&[u8]`, where each `u8` must be in `0..4`, and the
-/// `PackedSeq` type that contains packed sequences.
-pub trait Seq<'s>: Copy + Eq + Ord {
-    /// Number of bases/characters per byte of memory.
-    const BASES_PER_BYTE: usize;
-    /// Number of output bits of each character returned by `iter_bp` and variants.
-    const BITS_PER_CHAR: usize;
-    type SeqVec: SeqVec;
-
-    fn bits_per_char(&self) -> usize {
-        Self::BITS_PER_CHAR
-    }
-
-    /// The length of the sequence in bp.
-    fn len(&self) -> usize;
-
-    /// Get the packed character at the given index.
-    fn get(&self, _index: usize) -> u8;
-
-    /// Get the ASCII character at the given index, _without_ packing it.
-    /// Not implemented for packed data.
-    fn get_ascii(&self, _index: usize) -> u8;
-
-    /// Convert a short sequence (kmer) to a packed word.
-    /// Panics if `self` is longer than 29 characters.
-    fn to_word(&self) -> usize;
-
-    /// Convert to an owned version.
-    fn to_vec(&self) -> Self::SeqVec;
-
-    /// Get a sub-slice of the sequence.
-    fn slice(&self, range: Range<usize>) -> Self;
-
-    /// A simple iterator over characters.
-    /// Returns u8 values in [0, 4).
-    fn iter_bp(self) -> impl ExactSizeIterator<Item = u8> + Clone;
-
-    /// An iterator that splits the input into 8 chunks and streams over them in parallel.
-    /// Returns a separate `tail` iterator over the remaining characters.
-    /// The context can be e.g. the k-mer size being iterated. When `context>1`, consecutive chunk overlap by `context-1` bases.
-    fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S> + Clone, Self);
-
-    fn par_iter_bp_delayed(
-        self,
-        _context: usize,
-        _delay: usize,
-    ) -> (impl ExactSizeIterator<Item = (S, S)> + Clone, Self);
-
-    fn par_iter_bp_delayed_2(
-        self,
-        _context: usize,
-        _delay1: usize,
-        _delay2: usize,
-    ) -> (impl ExactSizeIterator<Item = (S, S, S)> + Clone, Self);
-
-    /// Compare and return the LCP of the two sequences.
-    fn cmp_lcp(&self, other: &Self) -> (std::cmp::Ordering, usize);
-}
-
-// Some hacky stuff to make conditional supertraits.
-cfg_if::cfg_if! {
-    if #[cfg(feature = "epserde")] {
-        pub use serde::{DeserializeInner, SerializeInner};
-    } else {
-        pub trait SerializeInner {}
-        pub trait DeserializeInner {}
-
-        impl SerializeInner for Vec<u8> {}
-        impl DeserializeInner for Vec<u8> {}
-        impl SerializeInner for AsciiSeqVec {}
-        impl DeserializeInner for AsciiSeqVec {}
-        impl SerializeInner for PackedSeqVec {}
-        impl DeserializeInner for PackedSeqVec {}
-    }
-}
-
-pub trait SeqVec:
-    Default + Sync + SerializeInner + DeserializeInner + MemSize + MemDbg + Clone + 'static
-{
-    type Seq<'s>: Seq<'s>;
-
-    fn as_slice(&self) -> Self::Seq<'_>;
-
-    /// Get a sub-slice of the sequence.
-    fn slice(&self, range: Range<usize>) -> Self::Seq<'_> {
-        self.as_slice().slice(range)
-    }
-
-    /// The length of the sequence in bp.
-    fn len(&self) -> usize {
-        self.as_slice().len()
-    }
-
-    /// Convert into the underlying raw representation.
-    fn into_raw(self) -> Vec<u8>;
-
-    /// Append the given sequence to the underlying storage.
-    /// This may leave gaps (padding) between consecutively pushed sequences to avoid re-aligning the pushed data.
-    /// Returns the range of indices corresponding to the pushed sequence.
-    /// Use `self.as_slice()[range]` to get the corresponding slice.
-    fn push_seq(&mut self, seq: Self::Seq<'_>) -> Range<usize>;
-
-    /// Append the given ASCII sequence to the underlying storage.
-    /// This may leave gaps (padding) between consecutively pushed sequences to avoid re-aligning the pushed data.
-    /// Returns the range of indices corresponding to the pushed sequence.
-    /// Use `self.as_slice()[range]` to get the corresponding slice.
-    fn push_ascii(&mut self, seq: &[u8]) -> Range<usize>;
-
-    /// Create an `PackedSeqVec` from an ASCII sequence. See `push_ascii` for details.
-    fn from_ascii(seq: &[u8]) -> Self {
-        let mut packed_vec = Self::default();
-        packed_vec.push_ascii(seq);
-        packed_vec
-    }
-
-    fn from_seqs<'a>(input_seqs: impl Iterator<Item = Self::Seq<'a>>) -> Self {
-        let mut seq = Self::default();
-        input_seqs.for_each(|slice| {
-            seq.push_seq(slice);
-        });
-        seq
-    }
-
-    fn random(n: usize) -> Self;
-}
+pub use traits::{Seq, SeqVec};
 
 // ---------------- STRUCTS ----------------
 
