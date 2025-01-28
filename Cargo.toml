@@ -1,7 +1,13 @@
 [package]
 name = "packed-seq"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2021"
+license = "MIT"
+repository = "https://github.com/rust-seq/packed-seq"
+keywords = ["packed", "simd", "dna", "bioinformatics"]
+categories = ["compression", "data-structures", "science::bioinformatics"]
+authors = ["Ragnar Groot Koerkamp", "Igor Martayan"]
+description = "Constructing and iterating packed DNA sequences using SIMD"
 
 [dependencies]
 wide = "0.7.32"
