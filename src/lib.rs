@@ -29,6 +29,13 @@
 //! Use `PackedSeqVec::from_ascii` to construct a `PackedSeqVec`.
 //! Currently this relies on the `pext` instruction for good performance on `x86`.
 //!
+//! ## Parallel iterators
+//!
+//! This library enables iterating 8 chunks of a sequence at the same time using SIMD instructions.
+//! The `iter_bp` functions return a `wide::u32x8` that contains the 2-bit or 8-bit values of the next character in each chunk in a `u32` for 8 SIMD lanes.
+//!
+//! This is used in the `simd-minimizers` crate, and explained in more detail in the corresponding [preprint](https://www.biorxiv.org/content/10.1101/2025.01.27.634998v1).
+//!
 //! ## Example
 //!
 //! ```
@@ -51,8 +58,11 @@
 //! assert_eq!(ascii_bases, bases);
 //! let packed_bases: Vec<u8> = ascii_seq.as_slice().iter_bp().collect();
 //! assert_eq!(packed_bases, bases);
-//!
 //! ```
+//!
+//! ## Feature flags
+//! - `epserde` enables `derive(epserde::Epserde)` for `PackedSeqVec` and `AsciiSeqVec`, and adds its `SerializeInner` and `DeserializeInner` traits to `SeqVec`.
+//! - `pyo3` enables `derive(pyo3::pyclass)` for `PackedSeqVec` and `AsciiSeqVec`.
 
 /// Functions with architecture-specific implementations.
 #[allow(unused)]
