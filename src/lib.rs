@@ -13,9 +13,16 @@
 //!
 //! 1: https://github.com/Daniel-Liu-c0deb0t/cute-nucleotides/blob/master/src/n_to_bits.rs#L213
 
+mod intrinsics {
+    mod deinterleave;
+    mod gather;
+
+    pub use deinterleave::deinterleave;
+    pub use gather::gather;
+}
+
 mod ascii;
 mod ascii_seq;
-mod intrinsics;
 mod packed_seq;
 
 #[cfg(test)]
