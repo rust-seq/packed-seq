@@ -1,5 +1,21 @@
 use super::*;
 
+/// A `Vec<u8>` representing an ASCII-encoded DNA sequence of `ACGTacgt`.
+///
+/// Other characters will be mapped into `[0, 4)` via `(c>>1)&3`, or may cause panics.
+#[derive(Clone, Debug, Default, MemSize, MemDbg)]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
+#[cfg_attr(feature = "epserde", derive(epserde::Epserde))]
+pub struct AsciiSeqVec {
+    pub seq: Vec<u8>,
+}
+
+/// A `&[u8]` representing an ASCII-encoded DNA sequence of `ACGTacgt`.
+///
+/// Other characters will be mapped into `[0, 4)` via `(c>>1)&3`, or may cause panics.
+#[derive(Copy, Clone, Debug, MemSize, MemDbg, PartialEq, Eq, PartialOrd, Ord)]
+pub struct AsciiSeq<'s>(pub &'s [u8]);
+
 /// Maps ASCII to `[0, 4)` on the fly.
 /// Prefer first packing into a `PackedSeqVec` for storage.
 impl<'s> Seq<'s> for AsciiSeq<'s> {

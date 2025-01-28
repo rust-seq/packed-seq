@@ -1,4 +1,67 @@
+use traits::Seq;
+
 use super::*;
+
+/// A 2-bit packed non-owned slice of DNA bases.
+#[derive(Copy, Clone, Debug, MemSize, MemDbg)]
+pub struct PackedSeq<'s> {
+    /// Packed data.
+    pub seq: &'s [u8],
+    /// Offset in bp from the start of the `seq`.
+    pub offset: usize,
+    /// Length of the sequence in bp, starting at `offset` from the start of `seq`.
+    pub len: usize,
+}
+
+/// A 2-bit packed owned sequence of DNA bases.
+#[derive(Clone, Debug, Default, MemSize, MemDbg)]
+#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
+#[cfg_attr(feature = "epserde", derive(epserde::Epserde))]
+pub struct PackedSeqVec {
+    pub seq: Vec<u8>,
+    pub len: usize,
+}
+
+/// Pack an ASCII `ACTGactg` character into its 2-bit representation.
+pub fn pack_char(base: u8) -> u8 {
+    match base {
+        b'a' | b'A' => 0,
+        b'c' | b'C' => 1,
+        b'g' | b'G' => 3,
+        b't' | b'T' => 2,
+        _ => panic!(
+            "Unexpected character '{}' with ASCII value {base}. Expected one of ACTGactg.",
+            base as char
+        ),
+    }
+}
+
+/// Unpack a 2-bit DNA base into the corresponding `ACTG` character.
+pub fn unpack_base(base: u8) -> u8 {
+    debug_assert!(base < 4, "Base {base} is not <4.");
+    b"ACTG"[base as usize]
+}
+
+/// Complement an ASCII character: `A<>T` and `C<>G`.
+pub const fn complement_char(base: u8) -> u8 {
+    match base {
+        b'A' => b'T',
+        b'C' => b'G',
+        b'G' => b'C',
+        b'T' => b'A',
+        _ => panic!("Unexpected character. Expected one of ACTGactg.",),
+    }
+}
+
+/// Complement a 2-bit base: `0<>2` and `1<>3`.
+pub const fn complement_base(base: u8) -> u8 {
+    base ^ 2
+}
+
+/// Complement 8 lanes of 2-bit bases: `0<>2` and `1<>3`.
+pub fn complement_base_simd(base: u32x8) -> u32x8 {
+    base ^ u32x8::splat(2)
+}
 
 impl<'s> PackedSeq<'s> {
     /// Shrink `seq` to only just cover the data.
@@ -14,7 +77,7 @@ impl<'s> PackedSeq<'s> {
     }
 
     pub fn unpack(&self) -> Vec<u8> {
-        self.iter_bp().map(unpack).collect()
+        self.iter_bp().map(unpack_base).collect()
     }
 }
 
