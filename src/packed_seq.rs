@@ -76,6 +76,7 @@ impl<'s> PackedSeq<'s> {
         }
     }
 
+    /// Return a `Vec<u8>` of ASCII `ACTG` characters.
     pub fn unpack(&self) -> Vec<u8> {
         self.iter_bp().map(unpack_base).collect()
     }
@@ -101,9 +102,10 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
 
     #[inline(always)]
     fn get_ascii(&self, index: usize) -> u8 {
-        unpack(self.get(index))
+        unpack_base(self.get(index))
     }
 
+    /// Panics if `self` is longer than 29 characters.
     #[inline(always)]
     fn to_word(&self) -> usize {
         assert!(self.len() <= usize::BITS as usize / 2 - 3);
@@ -113,7 +115,6 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         }
     }
 
-    /// Convert to an owned version.
     fn to_vec(&self) -> PackedSeqVec {
         assert_eq!(self.offset, 0);
         PackedSeqVec {
@@ -212,10 +213,6 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         )
     }
 
-    /// Iterate the basepairs in the sequence in 8 parallel streams, assuming values in `0..4`.
-    /// This version returns two streams, with one `delay` steps behind the other.
-    ///
-    /// The first `delay` iterations of the delayed character will return 0.
     #[inline(always)]
     fn par_iter_bp_delayed(
         self,
@@ -304,7 +301,6 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         )
     }
 
-    /// Delay1 must be smaller than delay2.
     #[inline(always)]
     fn par_iter_bp_delayed_2(
         self,
@@ -403,8 +399,8 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         )
     }
 
+    /// Compares 29 characters at a time.
     fn cmp_lcp(&self, other: &Self) -> (std::cmp::Ordering, usize) {
-        // Compare 29 characters at a time by converting them to a word.
         let mut lcp = 0;
         let min_len = self.len.min(other.len);
         for i in (0..min_len).step_by(29) {
@@ -428,11 +424,11 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
 }
 
 impl PartialEq for PackedSeq<'_> {
+    /// Compares 29 characters at a time.
     fn eq(&self, other: &Self) -> bool {
         if self.len != other.len {
             return false;
         }
-        // Compare 29 characters at a time by converting them to a word.
         for i in (0..self.len).step_by(29) {
             let len = (self.len - i).min(29);
             let this = self.slice(i..i + len);
@@ -454,8 +450,8 @@ impl PartialOrd for PackedSeq<'_> {
 }
 
 impl Ord for PackedSeq<'_> {
+    /// Compares 29 characters at a time.
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        // Compare 29 characters at a time by converting them to a word.
         let min_len = self.len.min(other.len);
         for i in (0..min_len).step_by(29) {
             let len = (min_len - i).min(29);
@@ -500,15 +496,15 @@ impl SeqVec for PackedSeqVec {
 
     /// Push an ASCII sequence to an `PackedSeqVec`.
     /// `Aa` map to `0`, `Cc` to `1`, `Gg` to `3`, and `Tt` to `2`.
-    /// Other characters may be silently mapped into `[0, 4)` or panick.
+    /// Other characters may be silently mapped into `[0, 4)` or panic.
     /// (TODO: Explicitly support different conversions.)
     ///
     /// Uses the BMI2 `pext` instruction when available, based on the
     /// `n_to_bits_pext` method described at
-    /// https://github.com/Daniel-Liu-c0deb0t/cute-nucleotides.
+    /// <https://github.com/Daniel-Liu-c0deb0t/cute-nucleotides>.
     ///
     /// TODO: Optimize for non-BMI2 platforms.
-    /// TODO: Support multiple ways of dealing with non-`ACGT` characters.
+    /// TODO: Support multiple ways of dealing with non-`ACTG` characters.
     fn push_ascii(&mut self, seq: &[u8]) -> Range<usize> {
         let start = 4 * self.seq.len();
         let len = seq.len();
