@@ -1,10 +1,7 @@
 use wide::u32x8;
 
 #[inline(always)]
-#[cfg(all(
-    any(target_arch = "x86", target_arch = "x86_64"),
-    target_feature = "avx2"
-))]
+#[cfg(target_feature = "avx2")]
 unsafe fn deinterleave_avx(a: u32x8, b: u32x8) -> (u32x8, u32x8) {
     #[cfg(target_arch = "x86")]
     use core::arch::x86::{__m256, __m256d, _mm256_permute4x64_pd, _mm256_shuffle_ps};
@@ -26,9 +23,8 @@ unsafe fn deinterleave_avx(a: u32x8, b: u32x8) -> (u32x8, u32x8) {
 }
 
 #[inline(always)]
-#[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+#[cfg(target_feature = "neon")]
 unsafe fn deinterleave_neon(a: u32x8, b: u32x8) -> (u32x8, u32x8) {
-    #[cfg(target_arch = "aarch64")]
     use core::arch::aarch64::{uint32x4_t, vuzp1q_u32, vuzp2q_u32};
     use core::mem::transmute;
 
@@ -75,24 +71,15 @@ unsafe fn deinterleave_fallback(a: u32x8, b: u32x8) -> (u32x8, u32x8) {
 /// positions in `a` and `b` and one vector with elements at odd positions.
 #[inline(always)]
 pub fn deinterleave(a: u32x8, b: u32x8) -> (u32x8, u32x8) {
-    #[cfg(all(
-        any(target_arch = "x86", target_arch = "x86_64"),
-        target_feature = "avx2"
-    ))]
+    #[cfg(target_feature = "avx2")]
     unsafe {
         deinterleave_avx(a, b)
     }
-    #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
+    #[cfg(target_feature = "neon")]
     unsafe {
         deinterleave_neon(a, b)
     }
-    #[cfg(not(any(
-        all(
-            any(target_arch = "x86", target_arch = "x86_64"),
-            target_feature = "avx2"
-        ),
-        all(target_arch = "aarch64", target_feature = "neon")
-    )))]
+    #[cfg(not(any(target_feature = "avx2", target_feature = "neon")))]
     unsafe {
         deinterleave_fallback(a, b)
     }

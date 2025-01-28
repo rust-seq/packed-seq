@@ -1,10 +1,7 @@
 use wide::u64x4;
 
 #[inline(always)]
-#[cfg(all(
-    any(target_arch = "x86", target_arch = "x86_64"),
-    target_feature = "avx2"
-))]
+#[cfg(target_feature = "avx2")]
 unsafe fn gather_avx2(ptr: *const u8, offsets: u64x4) -> u64x4 {
     #[cfg(target_arch = "x86")]
     use core::arch::x86::_mm256_i64gather_epi64;
@@ -32,17 +29,11 @@ unsafe fn gather_fallback(ptr: *const u8, offsets: u64x4) -> u64x4 {
 #[inline(always)]
 #[allow(clippy::not_unsafe_ptr_arg_deref)]
 pub fn gather(ptr: *const u8, offsets: u64x4) -> u64x4 {
-    #[cfg(all(
-        any(target_arch = "x86", target_arch = "x86_64"),
-        target_feature = "avx2"
-    ))]
+    #[cfg(target_feature = "avx2")]
     unsafe {
         gather_avx2(ptr, offsets)
     }
-    #[cfg(not(all(
-        any(target_arch = "x86", target_arch = "x86_64"),
-        target_feature = "avx2"
-    )))]
+    #[cfg(not(target_feature = "avx2"))]
     unsafe {
         gather_fallback(ptr, offsets)
     }
