@@ -73,15 +73,9 @@ mod packed_seq;
 #[cfg(test)]
 mod test;
 
-use core::{array::from_fn, mem::transmute};
-use mem_dbg::{MemDbg, MemSize};
-use rand::Rng;
-use std::{hint::assert_unchecked, ops::Range};
-use wide::{u32x8, u64x4};
-
 /// A SIMD vector containing 8 u32s.
-pub use wide::u32x8 as S;
-/// The number of lanes in `S`.
+pub use wide::u32x8;
+/// The number of lanes in a `u32x8`.
 pub const L: usize = 8;
 
 pub use ascii_seq::{AsciiSeq, AsciiSeqVec};
@@ -90,3 +84,11 @@ pub use packed_seq::{
 };
 pub use packed_seq::{PackedSeq, PackedSeqVec};
 pub use traits::{Seq, SeqVec};
+
+// For internal use only.
+use core::{array::from_fn, mem::transmute};
+use mem_dbg::{MemDbg, MemSize};
+use rand::Rng;
+use std::{hint::assert_unchecked, ops::Range};
+use wide::u32x8 as S;
+use wide::u64x4;
