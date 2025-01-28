@@ -84,17 +84,17 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
                     if i + 8 <= self.len() {
                         let chunk: &[u8; 8] = &self.0[i..i + 8].try_into().unwrap();
                         let ascii = u64::from_ne_bytes(*chunk);
-                        cache = unsafe { std::arch::x86_64::_pext_u64(ascii, 0x0606060606060606) };
+                        cache = ascii >> 1;
                     } else {
                         let mut chunk: [u8; 8] = [0; 8];
                         // Copy only part of the slice to avoid out-of-bounds indexing.
                         chunk[..self.len() - i].copy_from_slice(self.0[i..].try_into().unwrap());
                         let ascii = u64::from_ne_bytes(chunk);
-                        cache = unsafe { std::arch::x86_64::_pext_u64(ascii, 0x0606060606060606) };
+                        cache = ascii >> 1;
                     }
                 }
                 let base = cache & 0x03;
-                cache >>= 2;
+                cache >>= 8;
                 base as u8
             })
         }
