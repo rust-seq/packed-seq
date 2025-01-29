@@ -1,5 +1,8 @@
 # packed-seq
 
+[![crates.io](https://img.shields.io/crates/v/packed-seq)](https://crates.io/crates/packed-seq)
+[![docs](https://img.shields.io/docsrs/packed-seq)](https://docs.rs/packed-seq)
+
 A library for constructing and iterating packed `PackedSeq` DNA sequences that
 handles the encoding, decoding, and complements of packed bases.
 
