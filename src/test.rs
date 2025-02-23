@@ -142,6 +142,14 @@ fn iter_bp() {
         let packed = packed.as_slice().iter_bp().collect::<Vec<_>>();
         assert_eq!(ascii, packed);
     }
+    let ascii = AsciiSeqVec::from_ascii(seq);
+    let packed = PackedSeqVec::from_ascii(seq);
+    let len = seq.len();
+    for offset in 0..len {
+        let ascii = ascii.slice(offset..len).iter_bp().collect::<Vec<_>>();
+        let packed = packed.slice(offset..len).iter_bp().collect::<Vec<_>>();
+        assert_eq!(ascii, packed);
+    }
 }
 
 #[test]
