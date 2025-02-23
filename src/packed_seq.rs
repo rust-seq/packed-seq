@@ -512,15 +512,12 @@ impl SeqVec for PackedSeqVec {
 
         let unaligned = core::cmp::min(start_aligned - start, len);
         if unaligned > 0 {
-            // self.seq cannot be empty when start_aligned > start
-            let mut packed_byte = unsafe { *self.seq.last().unwrap_unchecked() };
+            let mut packed_byte = *self.seq.last().unwrap();
             for &base in &seq[..unaligned] {
                 packed_byte |= pack_char(base) << ((self.len % 4) * 2);
                 self.len += 1;
             }
-            unsafe {
-                *self.seq.last_mut().unwrap_unchecked() = packed_byte;
-            }
+            *self.seq.last_mut().unwrap() = packed_byte;
         }
 
         #[allow(unused)]
