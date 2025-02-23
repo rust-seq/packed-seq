@@ -111,6 +111,26 @@ fn packed_ord() {
 }
 
 #[test]
+fn push_ascii_unaligned() {
+    let seq = b"TCGGCTCGTTCC";
+    let mut packed = PackedSeqVec::default();
+    let range = packed.push_ascii(&seq[..3]);
+    assert_eq!(range, (0..3));
+    let range = packed.push_ascii(&seq[3..9]);
+    assert_eq!(range, (3..9));
+    let range = packed.push_ascii(&seq[9..]);
+    assert_eq!(range, (9..12));
+    assert_eq!(packed.len, seq.len());
+    let slice = packed.as_slice();
+    for (i, &c) in seq.iter().enumerate() {
+        assert_eq!(slice.get_ascii(i), c);
+    }
+    let packed2 = PackedSeqVec::from_ascii(seq);
+    let expected = packed2.as_slice();
+    assert!(slice.eq(&expected));
+}
+
+#[test]
 fn iter_bp() {
     let seq = b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT";
     for len in 0..=seq.len() {
