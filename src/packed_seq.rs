@@ -547,7 +547,7 @@ impl SeqVec for PackedSeqVec {
                 packed_byte = 0;
             }
         }
-        if self.len % 4 != 0 {
+        if self.len % 4 != 0 && last < len {
             self.seq.push(packed_byte);
         }
         start..start + len
