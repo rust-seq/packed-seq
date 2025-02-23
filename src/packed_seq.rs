@@ -506,17 +506,31 @@ impl SeqVec for PackedSeqVec {
     /// TODO: Optimize for non-BMI2 platforms.
     /// TODO: Support multiple ways of dealing with non-`ACTG` characters.
     fn push_ascii(&mut self, seq: &[u8]) -> Range<usize> {
-        let start = 4 * self.seq.len();
+        let start_aligned = 4 * self.seq.len();
+        let start = self.len;
         let len = seq.len();
 
+        let unaligned = core::cmp::min(start_aligned - start, len);
+        if unaligned > 0 {
+            // self.seq cannot be empty when start_aligned > start
+            let mut packed_byte = unsafe { *self.seq.last().unwrap_unchecked() };
+            for &base in &seq[..unaligned] {
+                packed_byte |= pack_char(base) << ((self.len % 4) * 2);
+                self.len += 1;
+            }
+            unsafe {
+                *self.seq.last_mut().unwrap_unchecked() = packed_byte;
+            }
+        }
+
         #[allow(unused)]
-        let mut last = 0;
+        let mut last = unaligned;
 
         #[cfg(all(target_arch = "x86_64", target_feature = "bmi2"))]
         {
             last = seq.len() / 8 * 8;
 
-            for i in (0..last).step_by(8) {
+            for i in (unaligned..last).step_by(8) {
                 let chunk = &seq[i..i + 8].try_into().unwrap();
                 let ascii = u64::from_ne_bytes(*chunk);
                 let packed_bytes =
