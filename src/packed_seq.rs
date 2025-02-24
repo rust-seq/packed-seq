@@ -525,7 +525,7 @@ impl SeqVec for PackedSeqVec {
 
         #[cfg(all(target_arch = "x86_64", target_feature = "bmi2"))]
         {
-            last = seq.len() / 8 * 8;
+            last = unaligned + (len - unaligned) / 8 * 8;
 
             for i in (unaligned..last).step_by(8) {
                 let chunk = &seq[i..i + 8].try_into().unwrap();
