@@ -132,22 +132,24 @@ fn push_ascii_unaligned() {
 
 #[test]
 fn push_ascii_random() {
-    let seq = AsciiSeqVec::random(110).into_raw();
-    let mut packed = PackedSeqVec::default();
-    let mut rng = rand::rng();
-    while packed.len < 100 {
-        let push_len = rng.random_range(1..=8);
-        let range = packed.len..(packed.len + push_len);
-        let range2 = packed.push_ascii(&seq[range.clone()]);
-        assert_eq!(range, range2);
+    for _ in 0..20 {
+        let seq = AsciiSeqVec::random(110).into_raw();
+        let mut packed = PackedSeqVec::default();
+        let mut rng = rand::rng();
+        while packed.len < 100 {
+            let push_len = rng.random_range(1..=8);
+            let range = packed.len..(packed.len + push_len);
+            let range2 = packed.push_ascii(&seq[range.clone()]);
+            assert_eq!(range, range2);
+        }
+        let slice = packed.as_slice();
+        for (i, &c) in seq.iter().take(100).enumerate() {
+            assert_eq!(slice.get_ascii(i), c);
+        }
+        let packed2 = PackedSeqVec::from_ascii(&seq[..packed.len]);
+        let expected = packed2.as_slice();
+        assert!(slice.eq(&expected));
     }
-    let slice = packed.as_slice();
-    for (i, &c) in seq.iter().take(100).enumerate() {
-        assert_eq!(slice.get_ascii(i), c);
-    }
-    let packed2 = PackedSeqVec::from_ascii(&seq[..packed.len]);
-    let expected = packed2.as_slice();
-    assert!(slice.eq(&expected));
 }
 
 #[test]
