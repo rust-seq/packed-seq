@@ -171,6 +171,12 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         context: usize,
         delay: usize,
     ) -> (impl ExactSizeIterator<Item = (S, S)> + Clone, Self) {
+        assert!(
+            delay < usize::MAX / 2,
+            "Delay={} should be >=0.",
+            delay as isize
+        );
+
         let num_kmers = self.len().saturating_sub(context - 1);
         let n = num_kmers / L;
 

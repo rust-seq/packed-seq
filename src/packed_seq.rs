@@ -222,6 +222,12 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         #[cfg(target_endian = "big")]
         panic!("Big endian architectures are not supported.");
 
+        assert!(
+            delay < usize::MAX / 2,
+            "Delay={} should be >=0.",
+            delay as isize
+        );
+
         let this = self.normalize();
         assert_eq!(
             this.offset % 4,
