@@ -114,7 +114,7 @@ pub use traits::{Seq, SeqVec};
 // For internal use only.
 use core::{array::from_fn, mem::transmute};
 use mem_dbg::{MemDbg, MemSize};
-use rand::Rng;
+use rand::{Rng, RngCore, SeedableRng};
 use std::{hint::assert_unchecked, ops::Range};
 use wide::u32x8 as S;
 use wide::u64x4;
