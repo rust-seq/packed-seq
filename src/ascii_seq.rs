@@ -383,7 +383,7 @@ impl SeqVec for AsciiSeqVec {
 
     fn random(n: usize) -> Self {
         let mut seq = vec![0; n];
-        rand_xoshiro::Xoshiro512StarStar::from_os_rng().fill_bytes(&mut seq);
+        rand::rngs::SmallRng::from_os_rng().fill_bytes(&mut seq);
         Self {
             seq: seq.into_iter().map(|b| b"ACGT"[b as usize % 4]).collect(),
         }

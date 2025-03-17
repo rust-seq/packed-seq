@@ -269,7 +269,6 @@ dependencies = [
  "mem_dbg",
  "pyo3",
  "rand",
- "rand_xoshiro",
  "wide",
 ]
 
@@ -404,15 +403,6 @@ checksum = "b08f3c9802962f7e1b25113931d94f43ed9725bebc59db9d0c3e9a23b67e15ff"
 dependencies = [
  "getrandom",
  "zerocopy 0.8.14",
-]
-
-[[package]]
-name = "rand_xoshiro"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f703f4665700daf5512dcca5f43afa6af89f09db47fb56be587f80636bda2d41"
-dependencies = [
- "rand_core",
 ]
 
 [[package]]
