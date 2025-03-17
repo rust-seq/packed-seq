@@ -560,8 +560,8 @@ impl SeqVec for PackedSeqVec {
     }
 
     fn random(n: usize) -> Self {
-        let mut rng = rand::rng();
-        let seq = (0..n.div_ceil(4)).map(|_| rng.random::<u8>()).collect();
+        let mut seq = vec![0; n.div_ceil(4)];
+        rand_xoshiro::Xoshiro512StarStar::from_os_rng().fill_bytes(&mut seq);
         PackedSeqVec { seq, len: n }
     }
 }
