@@ -275,7 +275,7 @@ impl SeqVec for Vec<u8> {
 
     fn random(n: usize) -> Self {
         let mut seq = vec![0; n];
-        rand_xoshiro::Xoshiro512StarStar::from_os_rng().fill_bytes(&mut seq);
+        rand::rngs::SmallRng::from_os_rng().fill_bytes(&mut seq);
         seq
     }
 }

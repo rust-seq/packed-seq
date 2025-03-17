@@ -561,7 +561,7 @@ impl SeqVec for PackedSeqVec {
 
     fn random(n: usize) -> Self {
         let mut seq = vec![0; n.div_ceil(4)];
-        rand_xoshiro::Xoshiro512StarStar::from_os_rng().fill_bytes(&mut seq);
+        rand::rngs::SmallRng::from_os_rng().fill_bytes(&mut seq);
         PackedSeqVec { seq, len: n }
     }
 }
