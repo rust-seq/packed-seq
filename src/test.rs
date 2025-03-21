@@ -20,6 +20,9 @@ fn pack_naive(seq: &[u8]) -> (Vec<u8>, usize) {
     (packed, packed_len)
 }
 
+#[cfg(test)]
+use rand::Rng;
+
 #[test]
 fn pack() {
     for n in 0..=128 {
