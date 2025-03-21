@@ -484,6 +484,7 @@ impl SeqVec for PackedSeqVec {
         self.seq
     }
 
+    #[inline(always)]
     fn as_slice(&self) -> Self::Seq<'_> {
         PackedSeq {
             seq: &self.seq,

@@ -138,6 +138,7 @@ pub trait SeqVec:
     fn as_slice(&self) -> Self::Seq<'_>;
 
     /// Get a sub-slice of the sequence. Indices are character offsets.
+    #[inline(always)]
     fn slice(&self, range: Range<usize>) -> Self::Seq<'_> {
         self.as_slice().slice(range)
     }

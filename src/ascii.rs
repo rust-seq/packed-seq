@@ -257,6 +257,7 @@ impl SeqVec for Vec<u8> {
         self
     }
 
+    #[inline(always)]
     fn as_slice(&self) -> Self::Seq<'_> {
         self.as_slice()
     }

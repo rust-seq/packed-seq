@@ -365,6 +365,7 @@ impl SeqVec for AsciiSeqVec {
         self.seq
     }
 
+    #[inline(always)]
     fn as_slice(&self) -> Self::Seq<'_> {
         AsciiSeq(self.seq.as_slice())
     }
