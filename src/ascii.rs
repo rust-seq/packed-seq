@@ -125,9 +125,9 @@ impl<'s> Seq<'s> for &[u8] {
                         (base_ptr.add(offsets[lane] + i) as *const u32x8).read_unaligned()
                     });
                     unsafe {
-                        let mut_array = buf
+                        let mut_array: &mut [u32x8; 8] = buf
                             .get_unchecked_mut(write_idx..write_idx + 8)
-                            .as_mut_array()
+                            .try_into()
                             .unwrap_unchecked();
                         *mut_array = transpose(data);
                     }
@@ -195,9 +195,9 @@ impl<'s> Seq<'s> for &[u8] {
                         (base_ptr.add(offsets[lane] + i) as *const u32x8).read_unaligned()
                     });
                     unsafe {
-                        let mut_array = buf
+                        let mut_array: &mut [u32x8; 8] = buf
                             .get_unchecked_mut(write_idx..write_idx + 8)
-                            .as_mut_array()
+                            .try_into()
                             .unwrap_unchecked();
                         *mut_array = transpose(data);
                     }

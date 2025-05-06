@@ -268,9 +268,10 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                         (base_ptr.add(offsets[lane] + (i / 4)) as *const u32x8).read_unaligned()
                     });
                     unsafe {
-                        *buf.get_unchecked_mut(write_idx..write_idx + 8)
-                            .as_mut_array()
-                            .unwrap_unchecked() = transpose(data);
+                        *TryInto::<&mut [u32x8; 8]>::try_into(
+                            buf.get_unchecked_mut(write_idx..write_idx + 8),
+                        )
+                        .unwrap_unchecked() = transpose(data);
                     }
                 }
                 upcoming = buf[write_idx];
@@ -350,9 +351,10 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                         (base_ptr.add(offsets[lane] + (i / 4)) as *const u32x8).read_unaligned()
                     });
                     unsafe {
-                        *buf.get_unchecked_mut(write_idx..write_idx + 8)
-                            .as_mut_array()
-                            .unwrap_unchecked() = transpose(data);
+                        *TryInto::<&mut [u32x8; 8]>::try_into(
+                            buf.get_unchecked_mut(write_idx..write_idx + 8),
+                        )
+                        .unwrap_unchecked() = transpose(data);
                     }
                 }
                 upcoming = buf[write_idx];
