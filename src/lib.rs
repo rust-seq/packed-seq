@@ -85,9 +85,11 @@
 mod intrinsics {
     mod deinterleave;
     mod gather;
+    mod transpose;
 
     pub use deinterleave::deinterleave;
     pub use gather::gather;
+    pub use transpose::transpose;
 }
 
 mod traits;
