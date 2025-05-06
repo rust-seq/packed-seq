@@ -184,15 +184,15 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let it = (0..par_len).map(move |i| {
             if i % 16 == 0 {
                 if i % 32 == 0 {
-                    // Read a u64 containing the next 8 characters.
+                    // Read a u64 containing the next 32 characters.
                     let idx_0_4 = offsets_lanes_0_4 + u64x4::splat((i / 4) as u64);
                     let idx_4_8 = offsets_lanes_4_8 + u64x4::splat((i / 4) as u64);
                     let u64_0_4: S = unsafe { transmute(intrinsics::gather(base_ptr, idx_0_4)) };
                     let u64_4_8: S = unsafe { transmute(intrinsics::gather(base_ptr, idx_4_8)) };
-                    // Split into two vecs containing a u32 of 4 characters each.
+                    // Split into two vecs containing a u32 of 16 characters each.
                     (cur, buf) = intrinsics::deinterleave(u64_0_4, u64_4_8);
                 } else {
-                    // Move on to the next u32 containing 4 buffered characters.
+                    // Move on to the next u32 containing 16 buffered characters.
                     cur = buf;
                 }
             }
