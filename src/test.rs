@@ -1,3 +1,4 @@
+use rand::random_range;
 use wide::u32x8;
 
 use super::*;
@@ -178,6 +179,28 @@ fn iter_bp() {
 }
 
 #[test]
+fn par_iter_bp() {
+    let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
+    let (head, tail) = s.as_slice().par_iter_bp(1);
+    let head = head.collect::<Vec<_>>();
+    let tail = tail.iter_bp().collect::<Vec<_>>();
+    fn f(x: &[u8; 8]) -> u32x8 {
+        let x = x.map(|x| pack_char(x) as u32);
+        u32x8::from(x)
+    }
+    assert_eq!(
+        head,
+        vec![
+            f(b"AAGACGAA"),
+            f(b"CAGACTAA"),
+            f(b"GCTAGTAA"),
+            f(b"TCTCGTAA"),
+        ]
+    );
+    assert_eq!(tail, vec![0, 1, 3, 2]);
+}
+
+#[test]
 fn par_iter_bp_delayed0() {
     let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
     let (head, tail) = s.as_slice().par_iter_bp_delayed(1, 0);
@@ -224,37 +247,91 @@ fn par_iter_bp_delayed1() {
 }
 
 #[test]
-fn par_iter_bp_delayed_large() {
-    let seq = AsciiSeqVec::random(48);
-    eprintln!("SEQ: {:?}", seq.seq);
-    let s = PackedSeqVec::from_ascii(&seq.seq);
-    let delay = 16;
-    let (head, _tail) = s.as_slice().par_iter_bp_delayed(17, delay);
-    let head = head.collect::<Vec<_>>();
-    fn f(x: &[u8; 8], y: &[u8; 8]) -> (u32x8, u32x8) {
-        let x = x.map(|x| pack_char(x) as u32);
-        let y = y.map(|x| pack_char(x) as u32);
-        (u32x8::from(x), u32x8::from(y))
+fn par_iter_bp_fuzz() {
+    let lens = (0..10)
+        .map(|_| random_range(0..10))
+        .chain((0..10).map(|_| random_range(10..100)))
+        .chain((0..10).map(|_| random_range(100..1000)))
+        .chain((0..10).map(|_| random_range(1000..10000)));
+    for len in lens {
+        let seq = AsciiSeqVec::random(len);
+        eprintln!("SEQ: {:?}", seq.seq);
+        let s = PackedSeqVec::from_ascii(&seq.seq);
+        let context = random_range(1..128);
+        let (head, _tail) = s.as_slice().par_iter_bp(context);
+        eprintln!("tail: {}", _tail.len());
+        let head = head.collect::<Vec<_>>();
+        fn f(x: &[u8; 8]) -> u32x8 {
+            let x = x.map(|x| pack_char(x) as u32);
+            u32x8::from(x)
+        }
+
+        let stride = {
+            let num_kmers = len.saturating_sub(context - 1);
+            (num_kmers / L) / 4 * 4
+        };
+
+        eprintln!("stride {stride}");
+        let len = head.len();
+        eprintln!("len {len}");
+        assert_eq!(
+            head,
+            (0..len)
+                .map(|i| { f(&from_fn(|j| seq.seq[i + stride * j]),) })
+                .collect::<Vec<_>>()
+        );
     }
-    let stride = 4;
-    let len = head.len();
-    assert_eq!(
-        head,
-        (0..len)
-            .map(|i| {
-                f(
-                    &from_fn(|j| seq.seq[i + stride * j]),
-                    &from_fn(|j| {
-                        if i < delay {
-                            b'A'
-                        } else {
-                            seq.seq[i + stride * j - delay]
-                        }
-                    }),
-                )
-            })
-            .collect::<Vec<_>>()
-    );
+}
+
+#[test]
+fn par_iter_bp_delayed_fuzz() {
+    let lens = (0..10)
+        .map(|_| random_range(0..10))
+        .chain((0..10).map(|_| random_range(10..100)))
+        .chain((0..10).map(|_| random_range(100..1000)))
+        .chain((0..10).map(|_| random_range(1000..10000)));
+    for len in lens {
+        let seq = AsciiSeqVec::random(len);
+        eprintln!("SEQ: {:?}", seq.seq);
+        let s = PackedSeqVec::from_ascii(&seq.seq);
+        let context = random_range(1..128);
+        let delay = random_range(0..128);
+        eprintln!("LEN {len} CONTEXT {context} DELAY {delay}");
+        let (head, _tail) = s.as_slice().par_iter_bp_delayed(context, delay);
+        eprintln!("tail: {}", _tail.len());
+        let head = head.collect::<Vec<_>>();
+        fn f(x: &[u8; 8], y: &[u8; 8]) -> (u32x8, u32x8) {
+            let x = x.map(|x| pack_char(x) as u32);
+            let y = y.map(|x| pack_char(x) as u32);
+            (u32x8::from(x), u32x8::from(y))
+        }
+
+        let stride = {
+            let num_kmers = len.saturating_sub(context - 1);
+            (num_kmers / L) / 4 * 4
+        };
+
+        eprintln!("stride {stride}");
+        let len = head.len();
+        eprintln!("len {len}");
+        assert_eq!(
+            head,
+            (0..len)
+                .map(|i| {
+                    f(
+                        &from_fn(|j| seq.seq[i + stride * j]),
+                        &from_fn(|j| {
+                            if i < delay {
+                                b'A'
+                            } else {
+                                seq.seq[i + stride * j - delay]
+                            }
+                        }),
+                    )
+                })
+                .collect::<Vec<_>>()
+        );
+    }
 }
 
 #[test]
