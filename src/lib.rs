@@ -82,14 +82,8 @@
 //! - `pyo3` enables `derive(pyo3::pyclass)` for `PackedSeqVec` and `AsciiSeqVec`.
 
 /// Functions with architecture-specific implementations.
-#[allow(unused)]
 mod intrinsics {
-    mod deinterleave;
-    mod gather;
     mod transpose;
-
-    pub use deinterleave::deinterleave;
-    pub use gather::gather;
     pub use transpose::transpose;
 }
 
