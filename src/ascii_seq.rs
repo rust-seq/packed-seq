@@ -1,3 +1,5 @@
+use crate::intrinsics::transpose;
+
 use super::*;
 
 /// A `Vec<u8>` representing an ASCII-encoded DNA sequence of `ACGTacgt`.
@@ -126,40 +128,33 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         let n = num_kmers / L;
 
         let base_ptr = self.0.as_ptr();
-        let offsets_lanes_0_4: u64x4 = from_fn(|l| (l * n) as u64).into();
-        let offsets_lanes_4_8: u64x4 = from_fn(|l| ((4 + l) * n) as u64).into();
-        let mut upcoming_1 = S::ZERO;
-        let mut upcoming_2 = S::ZERO;
+        let offsets: [usize; 8] = from_fn(|l| (l * n)).into();
+        let mut cur = S::ZERO;
+
+        // Boxed, so it doesn't consume precious registers.
+        // Without this, cur is not always inlined into a register.
+        let mut buf = Box::new([S::ZERO; 8]);
 
         let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
         let it = (0..par_len).map(move |i| {
             if i % 4 == 0 {
-                // TODO: Transpose
-                if i % 8 == 0 {
-                    // Read a u64 containing the next 8 characters.
-                    let idx_0_4 = offsets_lanes_0_4 + u64x4::splat(i as u64);
-                    let idx_4_8 = offsets_lanes_4_8 + u64x4::splat(i as u64);
-                    let u64_0_4: S = unsafe { transmute(intrinsics::gather(base_ptr, idx_0_4)) };
-                    let u64_4_8: S = unsafe { transmute(intrinsics::gather(base_ptr, idx_4_8)) };
-                    // Split into two vecs containing a u32 of 4 characters each.
-                    (upcoming_1, upcoming_2) = intrinsics::deinterleave(u64_0_4, u64_4_8);
-
-                    // Mask out the unneeded bits.
-                    let mask = 0x06060606;
-                    upcoming_1 &= S::splat(mask);
-                    upcoming_2 &= S::splat(mask);
-                    // Shift down everything by 1, so the needed bits are in the lowest 2 positions.
-                    upcoming_1 = upcoming_1 >> S::splat(1);
-                    upcoming_2 = upcoming_2 >> S::splat(1);
-                } else {
-                    // Move on to the next u32 containing 4 buffered characters.
-                    upcoming_1 = upcoming_2;
+                if i % 32 == 0 {
+                    // Read a u256 for each lane containing the next 32 characters.
+                    let data: [u32x8; 8] = from_fn(|lane| unsafe {
+                        // FIXME: Can this pagefault?
+                        (base_ptr.add(offsets[lane] + i) as *const u32x8).read_unaligned()
+                    });
+                    *buf = transpose(data);
+                    for x in buf.iter_mut() {
+                        *x = *x >> 1;
+                    }
                 }
+                cur = buf[(i % 32) / 4];
             }
             // Extract the last 2 bits of each character.
-            let chars = upcoming_1 & S::splat(0x03);
+            let chars = cur & S::splat(0x03);
             // Shift remaining characters to the right.
-            upcoming_1 = upcoming_1 >> S::splat(8);
+            cur = cur >> S::splat(8);
             chars
         });
 
@@ -182,16 +177,14 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         let n = num_kmers / L;
 
         let base_ptr = self.0.as_ptr();
-        let offsets_lanes_0_4: u64x4 = from_fn(|l| (l * n) as u64).into();
-        let offsets_lanes_4_8: u64x4 = from_fn(|l| ((4 + l) * n) as u64).into();
-
+        let offsets: [usize; 8] = from_fn(|l| (l * n)).into();
         let mut upcoming = S::ZERO;
         let mut upcoming_d = S::ZERO;
 
         // Even buf_len is nice to only have the write==buf_len check once.
         // We also make it the next power of 2, for faster modulo operations.
         // delay/4: number of bp in a u32.
-        let buf_len = (delay / 4 + 2).next_power_of_two();
+        let buf_len = (delay / 4 + 8).next_power_of_two();
         let buf_mask = buf_len - 1;
         let mut buf = vec![S::ZERO; buf_len];
         let mut write_idx = 0;
@@ -202,36 +195,26 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
         let it = (0..par_len).map(move |i| {
             if i % 4 == 0 {
-                // TODO: Transpose
-                if i % 8 == 0 {
-                    // Read a u64 containing the next 8 characters.
-                    let idx_0_4 = offsets_lanes_0_4 + u64x4::splat(i as u64);
-                    let idx_4_8 = offsets_lanes_4_8 + u64x4::splat(i as u64);
-                    let u64_0_4: S = unsafe { transmute(intrinsics::gather(base_ptr, idx_0_4)) };
-                    let u64_4_8: S = unsafe { transmute(intrinsics::gather(base_ptr, idx_4_8)) };
-                    // Split into two vecs containing a u32 of 4 characters each.
-                    let (mut a, mut b) = intrinsics::deinterleave(u64_0_4, u64_4_8);
-                    // Mask out the unneeded bits.
-                    let mask = 0x06060606;
-                    a &= S::splat(mask);
-                    b &= S::splat(mask);
-                    // Shift down everything by 1, so the needed bits are in the lowest 2 positions.
-                    a = a >> S::splat(1);
-                    b = b >> S::splat(1);
-                    unsafe { assert_unchecked(write_idx < buf.len()) };
-                    buf[write_idx] = a;
-                    upcoming = a;
-                    write_idx += 1;
-                    unsafe { assert_unchecked(write_idx < buf.len()) };
-                    buf[write_idx] = b;
-                    // write_idx will be incremented one more in the `else` below.
-                } else {
-                    // Move on to the next u32 containing 4 buffered characters.
-                    unsafe { assert_unchecked(write_idx < buf.len()) };
-                    upcoming = buf[write_idx];
-                    write_idx += 1;
-                    write_idx &= buf_mask;
+                if i % 32 == 0 {
+                    // Read a u256 for each lane containing the next 32 characters.
+                    let data: [u32x8; 8] = from_fn(|lane| unsafe {
+                        // FIXME: Can this pagefault?
+                        (base_ptr.add(offsets[lane] + i) as *const u32x8).read_unaligned()
+                    });
+                    unsafe {
+                        let mut_array = buf
+                            .get_unchecked_mut(write_idx..write_idx + 8)
+                            .as_mut_array()
+                            .unwrap_unchecked();
+                        *mut_array = transpose(data);
+                        for x in mut_array {
+                            *x = *x >> 1;
+                        }
+                    }
                 }
+                upcoming = buf[write_idx];
+                write_idx += 1;
+                write_idx &= buf_mask;
             }
             if i % 4 == delay % 4 {
                 unsafe { assert_unchecked(read_idx < buf.len()) };
@@ -264,8 +247,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         let n = num_kmers / L;
 
         let base_ptr = self.0.as_ptr();
-        let offsets_lanes_0_4: u64x4 = from_fn(|l| (l * n) as u64).into();
-        let offsets_lanes_4_8: u64x4 = from_fn(|l| ((4 + l) * n) as u64).into();
+        let offsets: [usize; 8] = from_fn(|l| (l * n)).into();
 
         let mut upcoming = S::ZERO;
         let mut upcoming_d1 = S::ZERO;
@@ -274,7 +256,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         // Even buf_len is nice to only have the write==buf_len check once.
         // We also make it the next power of 2, for faster modulo operations.
         // delay/4: number of bp in a u32.
-        let buf_len = (delay2 / 4 + 2).next_power_of_two();
+        let buf_len = (delay2 / 4 + 8).next_power_of_two();
         let buf_mask = buf_len - 1;
         let mut buf = vec![S::ZERO; buf_len];
         let mut write_idx = 0;
@@ -286,36 +268,26 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
         let it = (0..par_len).map(move |i| {
             if i % 4 == 0 {
-                // TODO: Transpose
-                if i % 8 == 0 {
-                    // Read a u64 containing the next 8 characters.
-                    let idx_0_4 = offsets_lanes_0_4 + u64x4::splat(i as u64);
-                    let idx_4_8 = offsets_lanes_4_8 + u64x4::splat(i as u64);
-                    let u64_0_4: S = unsafe { transmute(intrinsics::gather(base_ptr, idx_0_4)) };
-                    let u64_4_8: S = unsafe { transmute(intrinsics::gather(base_ptr, idx_4_8)) };
-                    // Split into two vecs containing a u32 of 4 characters each.
-                    let (mut a, mut b) = intrinsics::deinterleave(u64_0_4, u64_4_8);
-                    // Mask out the unneeded bits.
-                    let mask = 0x06060606;
-                    a &= S::splat(mask);
-                    b &= S::splat(mask);
-                    // Shift down everything by 1, so the needed bits are in the lowest 2 positions.
-                    a = a >> S::splat(1);
-                    b = b >> S::splat(1);
-                    unsafe { assert_unchecked(write_idx < buf.len()) };
-                    buf[write_idx] = a;
-                    upcoming = a;
-                    write_idx += 1;
-                    unsafe { assert_unchecked(write_idx < buf.len()) };
-                    buf[write_idx] = b;
-                    // write_idx will be incremented one more in the `else` below.
-                } else {
-                    // Move on to the next u32 containing 4 buffered characters.
-                    unsafe { assert_unchecked(write_idx < buf.len()) };
-                    upcoming = buf[write_idx];
-                    write_idx += 1;
-                    write_idx &= buf_mask;
+                if i % 32 == 0 {
+                    // Read a u256 for each lane containing the next 32 characters.
+                    let data: [u32x8; 8] = from_fn(|lane| unsafe {
+                        // FIXME: Can this pagefault?
+                        (base_ptr.add(offsets[lane] + i) as *const u32x8).read_unaligned()
+                    });
+                    unsafe {
+                        let mut_array = buf
+                            .get_unchecked_mut(write_idx..write_idx + 8)
+                            .as_mut_array()
+                            .unwrap_unchecked();
+                        *mut_array = transpose(data);
+                        for x in mut_array {
+                            *x = *x >> 1;
+                        }
+                    }
                 }
+                upcoming = buf[write_idx];
+                write_idx += 1;
+                write_idx &= buf_mask;
             }
             if i % 4 == delay1 % 4 {
                 unsafe { assert_unchecked(read_idx1 < buf.len()) };
