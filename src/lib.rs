@@ -1,3 +1,4 @@
+#![feature(slice_as_array)]
 //! Types and traits to iterate over (packed) input data.
 //!
 //! The main type is [`PackedSeqVec`], that holds a sequence of 2-bit packed DNA bases. [`PackedSeq`] is a non-owned slice of packed data.

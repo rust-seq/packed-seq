@@ -134,6 +134,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
         let it = (0..par_len).map(move |i| {
             if i % 4 == 0 {
+                // TODO: Transpose
                 if i % 8 == 0 {
                     // Read a u64 containing the next 8 characters.
                     let idx_0_4 = offsets_lanes_0_4 + u64x4::splat(i as u64);
@@ -201,6 +202,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
         let it = (0..par_len).map(move |i| {
             if i % 4 == 0 {
+                // TODO: Transpose
                 if i % 8 == 0 {
                     // Read a u64 containing the next 8 characters.
                     let idx_0_4 = offsets_lanes_0_4 + u64x4::splat(i as u64);
@@ -284,6 +286,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
         let it = (0..par_len).map(move |i| {
             if i % 4 == 0 {
+                // TODO: Transpose
                 if i % 8 == 0 {
                     // Read a u64 containing the next 8 characters.
                     let idx_0_4 = offsets_lanes_0_4 + u64x4::splat(i as u64);
