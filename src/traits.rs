@@ -51,7 +51,8 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     /// Iterate over 8 chunks of `b`-bit characters of the sequence in parallel.
     ///
     /// This splits the input into 8 chunks and streams over them in parallel.
-    /// Returns a separate `tail` iterator over the remaining characters.
+    /// The second output returns the number of 'padding' characters that was added to get a full number of SIMD lanes.
+    /// Thus, the last `padding` number of returned elements (from the last lane(s)) should be ignored.
     /// The context can be e.g. the k-mer size being iterated.
     /// When `context>1`, consecutive chunks overlap by `context-1` bases.
     ///
