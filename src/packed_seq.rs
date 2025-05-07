@@ -86,8 +86,9 @@ impl<'s> PackedSeq<'s> {
 
 #[inline(always)]
 pub(crate) fn read_slice(seq: &[u8], idx: usize) -> u32x8 {
+    // assert!(idx <= seq.len());
     let mut result = [0u8; 32];
-    let num_bytes = 32.min(seq.len() - idx);
+    let num_bytes = 32.min(seq.len().saturating_sub(idx));
     unsafe {
         let src = seq.as_ptr().add(idx);
         std::ptr::copy_nonoverlapping(src, result.as_mut_ptr(), num_bytes);
@@ -175,20 +176,17 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
     }
 
     #[inline(always)]
-    fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S> + Clone, Self) {
+    fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S> + Clone, usize) {
         #[cfg(target_endian = "big")]
         panic!("Big endian architectures are not supported.");
 
         let this = self.normalize();
-        assert_eq!(
-            this.offset % 4,
-            0,
-            "Non-byte offsets are not yet supported."
-        );
+        assert_eq!(this.offset, 0, "Non-byte offsets are not yet supported.");
 
         let num_kmers = this.len.saturating_sub(context - 1);
-        let n = (num_kmers / L) / 4 * 4;
+        let n = num_kmers.div_ceil(L).next_multiple_of(4);
         let bytes_per_chunk = n / 4;
+        let padding = 4 * L * bytes_per_chunk - num_kmers;
 
         let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk)).into();
         let mut cur = S::ZERO;
@@ -220,14 +218,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
             },
         );
 
-        (
-            it,
-            PackedSeq {
-                seq: &self.seq[L * bytes_per_chunk..],
-                offset: 0,
-                len: self.len - L * n,
-            },
-        )
+        (it, padding)
     }
 
     #[inline(always)]
@@ -235,7 +226,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         self,
         context: usize,
         delay: usize,
-    ) -> (impl ExactSizeIterator<Item = (S, S)> + Clone, Self) {
+    ) -> (impl ExactSizeIterator<Item = (S, S)> + Clone, usize) {
         #[cfg(target_endian = "big")]
         panic!("Big endian architectures are not supported.");
 
@@ -246,15 +237,12 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         );
 
         let this = self.normalize();
-        assert_eq!(
-            this.offset % 4,
-            0,
-            "Non-byte offsets are not yet supported."
-        );
+        assert_eq!(this.offset, 0, "Non-byte offsets are not yet supported.");
 
         let num_kmers = this.len.saturating_sub(context - 1);
-        let n = (num_kmers / L) / 4 * 4;
+        let n = num_kmers.div_ceil(L).next_multiple_of(4);
         let bytes_per_chunk = n / 4;
+        let padding = 4 * L * bytes_per_chunk - num_kmers;
 
         let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk)).into();
         let mut upcoming = S::ZERO;
@@ -309,14 +297,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
             },
         );
 
-        (
-            it,
-            PackedSeq {
-                seq: &self.seq[L * bytes_per_chunk..],
-                offset: 0,
-                len: self.len - L * n,
-            },
-        )
+        (it, padding)
     }
 
     #[inline(always)]
@@ -325,21 +306,18 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         context: usize,
         delay1: usize,
         delay2: usize,
-    ) -> (impl ExactSizeIterator<Item = (S, S, S)> + Clone, Self) {
+    ) -> (impl ExactSizeIterator<Item = (S, S, S)> + Clone, usize) {
         #[cfg(target_endian = "big")]
         panic!("Big endian architectures are not supported.");
 
         let this = self.normalize();
-        assert_eq!(
-            this.offset % 4,
-            0,
-            "Non-byte offsets are not yet supported."
-        );
+        assert_eq!(this.offset, 0, "Non-byte offsets are not yet supported.");
         assert!(delay1 <= delay2, "Delay1 must be at most delay2.");
 
         let num_kmers = this.len.saturating_sub(context - 1);
-        let n = (num_kmers / L) / 4 * 4;
+        let n = num_kmers.div_ceil(L).next_multiple_of(4);
         let bytes_per_chunk = n / 4;
+        let padding = 4 * L * bytes_per_chunk - num_kmers;
 
         let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk)).into();
         let mut upcoming = S::ZERO;
@@ -402,14 +380,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
             },
         );
 
-        (
-            it,
-            PackedSeq {
-                seq: &self.seq[L * bytes_per_chunk..],
-                offset: 0,
-                len: self.len - L * n,
-            },
-        )
+        (it, padding)
     }
 
     /// Compares 29 characters at a time.

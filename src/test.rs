@@ -181,69 +181,86 @@ fn iter_bp() {
 #[test]
 fn par_iter_bp() {
     let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
-    let (head, tail) = s.as_slice().par_iter_bp(1);
+    let (head, padding) = s.as_slice().par_iter_bp(1);
     let head = head.collect::<Vec<_>>();
-    let tail = tail.iter_bp().collect::<Vec<_>>();
     fn f(x: &[u8; 8]) -> u32x8 {
         let x = x.map(|x| pack_char(x) as u32);
         u32x8::from(x)
     }
+    assert_eq!(padding, 8 * 8 - s.len());
     assert_eq!(
         head,
         vec![
-            f(b"AAGACGAA"),
-            f(b"CAGACTAA"),
-            f(b"GCTAGTAA"),
-            f(b"TCTCGTAA"),
+            f(b"AGCAAAAA"),
+            f(b"CGCACAAA"),
+            f(b"GTGAGAAA"),
+            f(b"TTGATAAA"),
+            f(b"AAGAAAAA"),
+            f(b"AATAAAAA"),
+            f(b"CATAAAAA"),
+            f(b"CCTAAAAA"),
         ]
     );
-    assert_eq!(tail, vec![0, 1, 3, 2]);
 }
 
 #[test]
 fn par_iter_bp_delayed0() {
     let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
-    let (head, tail) = s.as_slice().par_iter_bp_delayed(1, 0);
+    let (head, padding) = s.as_slice().par_iter_bp_delayed(1, 0);
     let head = head.collect::<Vec<_>>();
-    let tail = tail.iter_bp().collect::<Vec<_>>();
     fn f(x: &[u8; 8], y: &[u8; 8]) -> (u32x8, u32x8) {
         let x = x.map(|x| pack_char(x) as u32);
         let y = y.map(|x| pack_char(x) as u32);
         (u32x8::from(x), u32x8::from(y))
     }
+    assert_eq!(padding, 8 * 8 - s.len());
     assert_eq!(
         head,
         vec![
-            f(b"AAGACGAA", b"AAGACGAA"),
-            f(b"CAGACTAA", b"CAGACTAA"),
-            f(b"GCTAGTAA", b"GCTAGTAA"),
-            f(b"TCTCGTAA", b"TCTCGTAA"),
+            f(b"AGCAAAAA", b"AGCAAAAA"),
+            f(b"CGCACAAA", b"CGCACAAA"),
+            f(b"GTGAGAAA", b"GTGAGAAA"),
+            f(b"TTGATAAA", b"TTGATAAA"),
+            f(b"AAGAAAAA", b"AAGAAAAA"),
+            f(b"AATAAAAA", b"AATAAAAA"),
+            f(b"CATAAAAA", b"CATAAAAA"),
+            f(b"CCTAAAAA", b"CCTAAAAA"),
         ]
     );
-    assert_eq!(tail, vec![0, 1, 3, 2]);
 }
 
 #[test]
 fn par_iter_bp_delayed1() {
     let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
-    let (head, tail) = s.as_slice().par_iter_bp_delayed(1, 1);
+    let (head, padding) = s.as_slice().par_iter_bp_delayed(1, 1);
     let head = head.collect::<Vec<_>>();
-    let tail = tail.iter_bp().collect::<Vec<_>>();
     fn f(x: &[u8; 8], y: &[u8; 8]) -> (u32x8, u32x8) {
         let x = x.map(|x| pack_char(x) as u32);
         let y = y.map(|x| pack_char(x) as u32);
         (u32x8::from(x), u32x8::from(y))
     }
+    assert_eq!(padding, 8 * 8 - s.len());
     assert_eq!(
         head,
         vec![
-            f(b"AAGACGAA", b"AAAAAAAA"),
-            f(b"CAGACTAA", b"AAGACGAA"),
-            f(b"GCTAGTAA", b"CAGACTAA"),
-            f(b"TCTCGTAA", b"GCTAGTAA"),
+            f(b"AGCAAAAA", b"AAAAAAAA"),
+            f(b"CGCACAAA", b"AGCAAAAA"),
+            f(b"GTGAGAAA", b"CGCACAAA"),
+            f(b"TTGATAAA", b"GTGAGAAA"),
+            f(b"AAGAAAAA", b"TTGATAAA"),
+            f(b"AATAAAAA", b"AAGAAAAA"),
+            f(b"CATAAAAA", b"AATAAAAA"),
+            f(b"CCTAAAAA", b"CATAAAAA"),
         ]
     );
-    assert_eq!(tail, vec![0, 1, 3, 2]);
+}
+
+fn get(slice: &[u8], i: usize) -> u8 {
+    if i < slice.len() {
+        slice[i]
+    } else {
+        b'A'
+    }
 }
 
 #[test]
@@ -258,8 +275,8 @@ fn par_iter_bp_fuzz() {
         eprintln!("SEQ: {:?}", seq.seq);
         let s = PackedSeqVec::from_ascii(&seq.seq);
         let context = random_range(1..512);
-        let (head, _tail) = s.as_slice().par_iter_bp(context);
-        eprintln!("tail: {}", _tail.len());
+        let (head, padding) = s.as_slice().par_iter_bp(context);
+        eprintln!("padding: {padding}");
         let head = head.collect::<Vec<_>>();
         fn f(x: &[u8; 8]) -> u32x8 {
             let x = x.map(|x| pack_char(x) as u32);
@@ -268,7 +285,7 @@ fn par_iter_bp_fuzz() {
 
         let stride = {
             let num_kmers = len.saturating_sub(context - 1);
-            (num_kmers / L) / 4 * 4
+            num_kmers.div_ceil(L).next_multiple_of(4)
         };
 
         eprintln!("stride {stride}");
@@ -277,7 +294,7 @@ fn par_iter_bp_fuzz() {
         assert_eq!(
             head,
             (0..len)
-                .map(|i| { f(&from_fn(|j| seq.seq[i + stride * j]),) })
+                .map(|i| { f(&from_fn(|j| get(&seq.seq, i + stride * j))) })
                 .collect::<Vec<_>>()
         );
     }
@@ -297,8 +314,8 @@ fn par_iter_bp_delayed_fuzz() {
         let context = random_range(1..512);
         let delay = random_range(0..512);
         eprintln!("LEN {len} CONTEXT {context} DELAY {delay}");
-        let (head, _tail) = s.as_slice().par_iter_bp_delayed(context, delay);
-        eprintln!("tail: {}", _tail.len());
+        let (head, padding) = s.as_slice().par_iter_bp_delayed(context, delay);
+        eprintln!("padding: {padding}");
         let head = head.collect::<Vec<_>>();
         fn f(x: &[u8; 8], y: &[u8; 8]) -> (u32x8, u32x8) {
             let x = x.map(|x| pack_char(x) as u32);
@@ -308,29 +325,34 @@ fn par_iter_bp_delayed_fuzz() {
 
         let stride = {
             let num_kmers = len.saturating_sub(context - 1);
-            (num_kmers / L) / 4 * 4
+            num_kmers.div_ceil(L).next_multiple_of(4)
         };
 
         eprintln!("stride {stride}");
         let len = head.len();
         eprintln!("len {len}");
-        assert_eq!(
-            head,
-            (0..len)
-                .map(|i| {
-                    f(
-                        &from_fn(|j| seq.seq[i + stride * j]),
-                        &from_fn(|j| {
-                            if i < delay {
-                                b'A'
-                            } else {
-                                seq.seq[i + stride * j - delay]
-                            }
-                        }),
-                    )
-                })
-                .collect::<Vec<_>>()
-        );
+        let ans = (0..len)
+            .map(|i| {
+                f(
+                    &from_fn(|j| get(&seq.seq, i + stride * j)),
+                    &from_fn(|j| {
+                        if i < delay {
+                            b'A'
+                        } else {
+                            get(&seq.seq, (i + stride * j).wrapping_sub(delay))
+                        }
+                    }),
+                )
+            })
+            .collect::<Vec<_>>();
+        if head != ans {
+            for (i, (x, y)) in head.iter().zip(ans.iter()).enumerate() {
+                if x != y {
+                    eprintln!("head {i} {x:?} != {y:?}");
+                }
+            }
+        }
+        assert!(head == ans);
     }
 }
 
@@ -349,8 +371,8 @@ fn par_iter_bp_delayed2_fuzz() {
         let delay = random_range(0..512);
         let delay2 = random_range(delay..=512);
         eprintln!("LEN {len} CONTEXT {context} DELAY {delay}");
-        let (head, tail) = s.as_slice().par_iter_bp_delayed_2(context, delay, delay2);
-        eprintln!("tail: {}", tail.len());
+        let (head, padding) = s.as_slice().par_iter_bp_delayed_2(context, delay, delay2);
+        eprintln!("padding: {padding}");
         let head = head.collect::<Vec<_>>();
         fn f(x: &[u8; 8], y: &[u8; 8], z: &[u8; 8]) -> (u32x8, u32x8, u32x8) {
             let x = x.map(|x| pack_char(x) as u32);
@@ -361,7 +383,7 @@ fn par_iter_bp_delayed2_fuzz() {
 
         let stride = {
             let num_kmers = len.saturating_sub(context - 1);
-            (num_kmers / L) / 4 * 4
+            num_kmers.div_ceil(L).next_multiple_of(4)
         };
 
         eprintln!("stride {stride}");
@@ -372,19 +394,19 @@ fn par_iter_bp_delayed2_fuzz() {
             (0..len)
                 .map(|i| {
                     f(
-                        &from_fn(|j| seq.seq[i + stride * j]),
+                        &from_fn(|j| get(&seq.seq, i + stride * j)),
                         &from_fn(|j| {
                             if i < delay {
                                 b'A'
                             } else {
-                                seq.seq[i + stride * j - delay]
+                                get(&seq.seq, i + stride * j - delay)
                             }
                         }),
                         &from_fn(|j| {
                             if i < delay2 {
                                 b'A'
                             } else {
-                                seq.seq[i + stride * j - delay2]
+                                get(&seq.seq, i + stride * j - delay2)
                             }
                         }),
                     )
@@ -397,29 +419,32 @@ fn par_iter_bp_delayed2_fuzz() {
 #[test]
 fn par_iter_bp_delayed01() {
     let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
-    let (head, tail) = s.as_slice().par_iter_bp_delayed_2(1, 0, 1);
+    let (head, padding) = s.as_slice().par_iter_bp_delayed_2(1, 0, 1);
     let head = head.collect::<Vec<_>>();
-    let tail = tail.iter_bp().collect::<Vec<_>>();
     fn f(x: &[u8; 8], y: &[u8; 8], z: &[u8; 8]) -> (u32x8, u32x8, u32x8) {
         let x = x.map(|x| pack_char(x) as u32);
         let y = y.map(|x| pack_char(x) as u32);
         let z = z.map(|x| pack_char(x) as u32);
         (u32x8::from(x), u32x8::from(y), u32x8::from(z))
     }
+    assert_eq!(padding, 8 * 8 - s.len());
     assert_eq!(
         head,
         vec![
-            f(b"AAGACGAA", b"AAGACGAA", b"AAAAAAAA"),
-            f(b"CAGACTAA", b"CAGACTAA", b"AAGACGAA"),
-            f(b"GCTAGTAA", b"GCTAGTAA", b"CAGACTAA"),
-            f(b"TCTCGTAA", b"TCTCGTAA", b"GCTAGTAA"),
+            f(b"AGCAAAAA", b"AGCAAAAA", b"AAAAAAAA"),
+            f(b"CGCACAAA", b"CGCACAAA", b"AGCAAAAA"),
+            f(b"GTGAGAAA", b"GTGAGAAA", b"CGCACAAA"),
+            f(b"TTGATAAA", b"TTGATAAA", b"GTGAGAAA"),
+            f(b"AAGAAAAA", b"AAGAAAAA", b"TTGATAAA"),
+            f(b"AATAAAAA", b"AATAAAAA", b"AAGAAAAA"),
+            f(b"CATAAAAA", b"CATAAAAA", b"AATAAAAA"),
+            f(b"CCTAAAAA", b"CCTAAAAA", b"CATAAAAA"),
         ]
     );
-    assert_eq!(tail, vec![0, 1, 3, 2]);
 }
 
 #[test]
-fn get() {
+fn slice_get() {
     let n = 1000;
     let s = PackedSeqVec::random(n);
     let iter_bp = s.as_slice().iter_bp().collect::<Vec<_>>();

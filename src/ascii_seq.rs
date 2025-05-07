@@ -127,9 +127,10 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
 
     /// Iterate the basepairs in the sequence in 8 parallel streams, assuming values in `0..4`.
     #[inline(always)]
-    fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S> + Clone, Self) {
+    fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S> + Clone, usize) {
         let num_kmers = self.len().saturating_sub(context - 1);
-        let n = num_kmers / L;
+        let n = num_kmers.div_ceil(L);
+        let padding = L * n - num_kmers;
 
         let offsets: [usize; 8] = from_fn(|l| (l * n)).into();
         let mut cur = S::ZERO;
@@ -164,7 +165,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
             },
         );
 
-        (it, Self(&self.0[L * n..]))
+        (it, padding)
     }
 
     #[inline(always)]
@@ -172,7 +173,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         self,
         context: usize,
         delay: usize,
-    ) -> (impl ExactSizeIterator<Item = (S, S)> + Clone, Self) {
+    ) -> (impl ExactSizeIterator<Item = (S, S)> + Clone, usize) {
         assert!(
             delay < usize::MAX / 2,
             "Delay={} should be >=0.",
@@ -180,7 +181,13 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         );
 
         let num_kmers = self.len().saturating_sub(context - 1);
-        let n = num_kmers / L;
+        let n = num_kmers.div_ceil(L);
+        eprintln!(
+            "len {} kmers {num_kmers} n {n} total out {}",
+            self.len(),
+            L * n
+        );
+        let padding = L * n - num_kmers;
 
         let offsets: [usize; 8] = from_fn(|l| (l * n)).into();
         let mut upcoming = S::ZERO;
@@ -239,7 +246,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
             },
         );
 
-        (it, Self(&self.0[L * n..]))
+        (it, padding)
     }
 
     #[inline(always)]
@@ -248,11 +255,12 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         context: usize,
         delay1: usize,
         delay2: usize,
-    ) -> (impl ExactSizeIterator<Item = (S, S, S)> + Clone, Self) {
+    ) -> (impl ExactSizeIterator<Item = (S, S, S)> + Clone, usize) {
         assert!(delay1 <= delay2, "Delay1 must be at most delay2.");
 
         let num_kmers = self.len().saturating_sub(context - 1);
-        let n = num_kmers / L;
+        let n = num_kmers.div_ceil(L);
+        let padding = L * n - num_kmers;
 
         let offsets: [usize; 8] = from_fn(|l| (l * n)).into();
 
@@ -322,7 +330,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
             },
         );
 
-        (it, Self(&self.0[L * n..]))
+        (it, padding)
     }
 
     // TODO: This is not very optimized.

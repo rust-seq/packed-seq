@@ -56,7 +56,7 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     /// When `context>1`, consecutive chunks overlap by `context-1` bases.
     ///
     /// Expected to be implemented using SIMD instructions.
-    fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = u32x8> + Clone, Self);
+    fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = u32x8> + Clone, usize);
 
     /// Iterate over 8 chunks of the sequence in parallel, returning two characters offset by `delay` positions.
     ///
@@ -73,7 +73,7 @@ pub trait Seq<'s>: Copy + Eq + Ord {
         self,
         context: usize,
         delay: usize,
-    ) -> (impl ExactSizeIterator<Item = (u32x8, u32x8)> + Clone, Self);
+    ) -> (impl ExactSizeIterator<Item = (u32x8, u32x8)> + Clone, usize);
 
     /// Iterate over 8 chunks of the sequence in parallel, returning three characters:
     /// the char added, the one `delay` positions before, and the one `delay2` positions before.
@@ -96,7 +96,7 @@ pub trait Seq<'s>: Copy + Eq + Ord {
         delay2: usize,
     ) -> (
         impl ExactSizeIterator<Item = (u32x8, u32x8, u32x8)> + Clone,
-        Self,
+        usize,
     );
 
     /// Compare and return the LCP of the two sequences.
