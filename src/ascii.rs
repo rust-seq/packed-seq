@@ -1,4 +1,4 @@
-use crate::intrinsics::transpose;
+use crate::{intrinsics::transpose, packed_seq::read_slice};
 
 use super::*;
 
@@ -53,7 +53,6 @@ impl<'s> Seq<'s> for &[u8] {
         let num_kmers = self.len().saturating_sub(context - 1);
         let n = num_kmers / L;
 
-        let base_ptr = self.as_ptr();
         let offsets: [usize; 8] = from_fn(|l| (l * n)).into();
         let mut cur = S::ZERO;
 
@@ -62,24 +61,27 @@ impl<'s> Seq<'s> for &[u8] {
         let mut buf = Box::new([S::ZERO; 8]);
 
         let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
-        let it = (0..par_len).map(move |i| {
-            if i % 4 == 0 {
-                if i % 32 == 0 {
-                    // Read a u256 for each lane containing the next 32 characters.
-                    let data: [u32x8; 8] = from_fn(|lane| unsafe {
-                        // FIXME: Can this pagefault?
-                        (base_ptr.add(offsets[lane] + i) as *const u32x8).read_unaligned()
-                    });
-                    *buf = transpose(data);
+        let it = (0..par_len).map(
+            #[inline(always)]
+            move |i| {
+                if i % 4 == 0 {
+                    if i % 32 == 0 {
+                        // Read a u256 for each lane containing the next 32 characters.
+                        let data: [u32x8; 8] = from_fn(
+                            #[inline(always)]
+                            |lane| read_slice(self, offsets[lane] + i),
+                        );
+                        *buf = transpose(data);
+                    }
+                    cur = buf[(i % 32) / 4];
                 }
-                cur = buf[(i % 32) / 4];
-            }
-            // Extract the last 2 bits of each character.
-            let chars = cur & S::splat(0xff);
-            // Shift remaining characters to the right.
-            cur = cur >> S::splat(8);
-            chars
-        });
+                // Extract the last 2 bits of each character.
+                let chars = cur & S::splat(0xff);
+                // Shift remaining characters to the right.
+                cur = cur >> S::splat(8);
+                chars
+            },
+        );
 
         (it, &self[L * n..])
     }
@@ -99,7 +101,6 @@ impl<'s> Seq<'s> for &[u8] {
         let num_kmers = self.len().saturating_sub(context - 1);
         let n = num_kmers / L;
 
-        let base_ptr = self.as_ptr();
         let offsets: [usize; 8] = from_fn(|l| (l * n)).into();
         let mut upcoming = S::ZERO;
         let mut upcoming_d = S::ZERO;
@@ -116,40 +117,43 @@ impl<'s> Seq<'s> for &[u8] {
         let mut read_idx = (buf_len - delay / 4) % buf_len;
 
         let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
-        let it = (0..par_len).map(move |i| {
-            if i % 4 == 0 {
-                if i % 32 == 0 {
-                    // Read a u256 for each lane containing the next 32 characters.
-                    let data: [u32x8; 8] = from_fn(|lane| unsafe {
-                        // FIXME: Can this pagefault?
-                        (base_ptr.add(offsets[lane] + i) as *const u32x8).read_unaligned()
-                    });
-                    unsafe {
-                        let mut_array: &mut [u32x8; 8] = buf
-                            .get_unchecked_mut(write_idx..write_idx + 8)
-                            .try_into()
-                            .unwrap_unchecked();
-                        *mut_array = transpose(data);
+        let it = (0..par_len).map(
+            #[inline(always)]
+            move |i| {
+                if i % 4 == 0 {
+                    if i % 32 == 0 {
+                        // Read a u256 for each lane containing the next 32 characters.
+                        let data: [u32x8; 8] = from_fn(
+                            #[inline(always)]
+                            |lane| read_slice(self, offsets[lane] + i),
+                        );
+                        unsafe {
+                            let mut_array: &mut [u32x8; 8] = buf
+                                .get_unchecked_mut(write_idx..write_idx + 8)
+                                .try_into()
+                                .unwrap_unchecked();
+                            *mut_array = transpose(data);
+                        }
                     }
+                    upcoming = buf[write_idx];
+                    write_idx += 1;
+                    write_idx &= buf_mask;
                 }
-                upcoming = buf[write_idx];
-                write_idx += 1;
-                write_idx &= buf_mask;
-            }
-            if i % 4 == delay % 4 {
-                unsafe { assert_unchecked(read_idx < buf.len()) };
-                upcoming_d = buf[read_idx];
-                read_idx += 1;
-                read_idx &= buf_mask;
-            }
-            // Extract the last 2 bits of each character.
-            let chars = upcoming & S::splat(0xff);
-            let chars_d = upcoming_d & S::splat(0xff);
-            // Shift remaining characters to the right.
-            upcoming = upcoming >> S::splat(8);
-            upcoming_d = upcoming_d >> S::splat(8);
-            (chars, chars_d)
-        });
+                if i % 4 == delay % 4 {
+                    unsafe { assert_unchecked(read_idx < buf.len()) };
+                    upcoming_d = buf[read_idx];
+                    read_idx += 1;
+                    read_idx &= buf_mask;
+                }
+                // Extract the last 2 bits of each character.
+                let chars = upcoming & S::splat(0xff);
+                let chars_d = upcoming_d & S::splat(0xff);
+                // Shift remaining characters to the right.
+                upcoming = upcoming >> S::splat(8);
+                upcoming_d = upcoming_d >> S::splat(8);
+                (chars, chars_d)
+            },
+        );
 
         (it, &self[L * n..])
     }
@@ -166,7 +170,6 @@ impl<'s> Seq<'s> for &[u8] {
         let num_kmers = self.len().saturating_sub(context - 1);
         let n = num_kmers / L;
 
-        let base_ptr = self.as_ptr();
         let offsets: [usize; 8] = from_fn(|l| (l * n)).into();
 
         let mut upcoming = S::ZERO;
@@ -186,48 +189,51 @@ impl<'s> Seq<'s> for &[u8] {
         let mut read_idx2 = (buf_len - delay2 / 4) % buf_len;
 
         let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
-        let it = (0..par_len).map(move |i| {
-            if i % 4 == 0 {
-                if i % 32 == 0 {
-                    // Read a u256 for each lane containing the next 32 characters.
-                    let data: [u32x8; 8] = from_fn(|lane| unsafe {
-                        // FIXME: Can this pagefault?
-                        (base_ptr.add(offsets[lane] + i) as *const u32x8).read_unaligned()
-                    });
-                    unsafe {
-                        let mut_array: &mut [u32x8; 8] = buf
-                            .get_unchecked_mut(write_idx..write_idx + 8)
-                            .try_into()
-                            .unwrap_unchecked();
-                        *mut_array = transpose(data);
+        let it = (0..par_len).map(
+            #[inline(always)]
+            move |i| {
+                if i % 4 == 0 {
+                    if i % 32 == 0 {
+                        // Read a u256 for each lane containing the next 32 characters.
+                        let data: [u32x8; 8] = from_fn(
+                            #[inline(always)]
+                            |lane| read_slice(self, offsets[lane] + i),
+                        );
+                        unsafe {
+                            let mut_array: &mut [u32x8; 8] = buf
+                                .get_unchecked_mut(write_idx..write_idx + 8)
+                                .try_into()
+                                .unwrap_unchecked();
+                            *mut_array = transpose(data);
+                        }
                     }
+                    upcoming = buf[write_idx];
+                    write_idx += 1;
+                    write_idx &= buf_mask;
                 }
-                upcoming = buf[write_idx];
-                write_idx += 1;
-                write_idx &= buf_mask;
-            }
-            if i % 4 == delay1 % 4 {
-                unsafe { assert_unchecked(read_idx1 < buf.len()) };
-                upcoming_d1 = buf[read_idx1];
-                read_idx1 += 1;
-                read_idx1 &= buf_mask;
-            }
-            if i % 4 == delay2 % 4 {
-                unsafe { assert_unchecked(read_idx2 < buf.len()) };
-                upcoming_d2 = buf[read_idx2];
-                read_idx2 += 1;
-                read_idx2 &= buf_mask;
-            }
-            // Extract the last 2 bits of each character.
-            let chars = upcoming & S::splat(0xff);
-            let chars_d1 = upcoming_d1 & S::splat(0xff);
-            let chars_d2 = upcoming_d2 & S::splat(0xff);
-            // Shift remaining characters to the right.
-            upcoming = upcoming >> S::splat(8);
-            upcoming_d1 = upcoming_d1 >> S::splat(8);
-            upcoming_d2 = upcoming_d2 >> S::splat(8);
-            (chars, chars_d1, chars_d2)
-        });
+                if i % 4 == delay1 % 4 {
+                    unsafe { assert_unchecked(read_idx1 < buf.len()) };
+                    upcoming_d1 = buf[read_idx1];
+                    read_idx1 += 1;
+                    read_idx1 &= buf_mask;
+                }
+                if i % 4 == delay2 % 4 {
+                    unsafe { assert_unchecked(read_idx2 < buf.len()) };
+                    upcoming_d2 = buf[read_idx2];
+                    read_idx2 += 1;
+                    read_idx2 &= buf_mask;
+                }
+                // Extract the last 2 bits of each character.
+                let chars = upcoming & S::splat(0xff);
+                let chars_d1 = upcoming_d1 & S::splat(0xff);
+                let chars_d2 = upcoming_d2 & S::splat(0xff);
+                // Shift remaining characters to the right.
+                upcoming = upcoming >> S::splat(8);
+                upcoming_d1 = upcoming_d1 >> S::splat(8);
+                upcoming_d2 = upcoming_d2 >> S::splat(8);
+                (chars, chars_d1, chars_d2)
+            },
+        );
 
         (it, &self[L * n..])
     }

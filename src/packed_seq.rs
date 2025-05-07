@@ -84,6 +84,17 @@ impl<'s> PackedSeq<'s> {
     }
 }
 
+#[inline(always)]
+pub(crate) fn read_slice(seq: &[u8], idx: usize) -> u32x8 {
+    let mut result = [0u8; 32];
+    let num_bytes = 32.min(seq.len() - idx);
+    unsafe {
+        let src = seq.as_ptr().add(idx);
+        std::ptr::copy_nonoverlapping(src, result.as_mut_ptr(), num_bytes);
+        std::mem::transmute(result)
+    }
+}
+
 impl<'s> Seq<'s> for PackedSeq<'s> {
     const BASES_PER_BYTE: usize = 4;
     const BITS_PER_CHAR: usize = 2;
@@ -149,13 +160,16 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
 
         // read u64 at a time?
         let mut byte = 0;
-        let mut it = (0..this.len + this.offset).map(move |i| {
-            if i % 4 == 0 {
-                byte = this.seq[i / 4];
-            }
-            // Shift byte instead of i?
-            (byte >> (2 * (i % 4))) & 0b11
-        });
+        let mut it = (0..this.len + this.offset).map(
+            #[inline(always)]
+            move |i| {
+                if i % 4 == 0 {
+                    byte = this.seq[i / 4];
+                }
+                // Shift byte instead of i?
+                (byte >> (2 * (i % 4))) & 0b11
+            },
+        );
         it.by_ref().take(this.offset).for_each(drop);
         it
     }
@@ -173,12 +187,9 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         );
 
         let num_kmers = this.len.saturating_sub(context - 1);
-        // FIXME: Probably we should round down more to ensure read_unaligned
-        // does not go out-of-bounds?
         let n = (num_kmers / L) / 4 * 4;
         let bytes_per_chunk = n / 4;
 
-        let base_ptr = this.seq.as_ptr();
         let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk)).into();
         let mut cur = S::ZERO;
 
@@ -187,24 +198,27 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let mut buf = Box::new([S::ZERO; 8]);
 
         let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
-        let it = (0..par_len).map(move |i| {
-            if i % 16 == 0 {
-                if i % 128 == 0 {
-                    // Read a u256 for each lane containing the next 128 characters.
-                    let data: [u32x8; 8] = from_fn(|lane| unsafe {
-                        // FIXME: Can this pagefault?
-                        (base_ptr.add(offsets[lane] + (i / 4)) as *const u32x8).read_unaligned()
-                    });
-                    *buf = transpose(data);
+        let it = (0..par_len).map(
+            #[inline(always)]
+            move |i| {
+                if i % 16 == 0 {
+                    if i % 128 == 0 {
+                        // Read a u256 for each lane containing the next 128 characters.
+                        let data: [u32x8; 8] = from_fn(
+                            #[inline(always)]
+                            |lane| read_slice(this.seq, offsets[lane] + (i / 4)),
+                        );
+                        *buf = transpose(data);
+                    }
+                    cur = buf[(i % 128) / 16];
                 }
-                cur = buf[(i % 128) / 16];
-            }
-            // Extract the last 2 bits of each character.
-            let chars = cur & S::splat(0x03);
-            // Shift remaining characters to the right.
-            cur = cur >> S::splat(2);
-            chars
-        });
+                // Extract the last 2 bits of each character.
+                let chars = cur & S::splat(0x03);
+                // Shift remaining characters to the right.
+                cur = cur >> S::splat(2);
+                chars
+            },
+        );
 
         (
             it,
@@ -242,7 +256,6 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let n = (num_kmers / L) / 4 * 4;
         let bytes_per_chunk = n / 4;
 
-        let base_ptr = this.seq.as_ptr();
         let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk)).into();
         let mut upcoming = S::ZERO;
         let mut upcoming_d = S::ZERO;
@@ -259,39 +272,42 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let mut read_idx = (buf_len - delay / 16) % buf_len;
 
         let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
-        let it = (0..par_len).map(move |i| {
-            if i % 16 == 0 {
-                if i % 128 == 0 {
-                    // Read a u256 for each lane containing the next 128 characters.
-                    let data: [u32x8; 8] = from_fn(|lane| unsafe {
-                        // FIXME: Can this pagefault?
-                        (base_ptr.add(offsets[lane] + (i / 4)) as *const u32x8).read_unaligned()
-                    });
-                    unsafe {
-                        *TryInto::<&mut [u32x8; 8]>::try_into(
-                            buf.get_unchecked_mut(write_idx..write_idx + 8),
-                        )
-                        .unwrap_unchecked() = transpose(data);
+        let it = (0..par_len).map(
+            #[inline(always)]
+            move |i| {
+                if i % 16 == 0 {
+                    if i % 128 == 0 {
+                        // Read a u256 for each lane containing the next 128 characters.
+                        let data: [u32x8; 8] = from_fn(
+                            #[inline(always)]
+                            |lane| read_slice(this.seq, offsets[lane] + (i / 4)),
+                        );
+                        unsafe {
+                            *TryInto::<&mut [u32x8; 8]>::try_into(
+                                buf.get_unchecked_mut(write_idx..write_idx + 8),
+                            )
+                            .unwrap_unchecked() = transpose(data);
+                        }
                     }
+                    upcoming = buf[write_idx];
+                    write_idx += 1;
+                    write_idx &= buf_mask;
                 }
-                upcoming = buf[write_idx];
-                write_idx += 1;
-                write_idx &= buf_mask;
-            }
-            if i % 16 == delay % 16 {
-                unsafe { assert_unchecked(read_idx < buf.len()) };
-                upcoming_d = buf[read_idx];
-                read_idx += 1;
-                read_idx &= buf_mask;
-            }
-            // Extract the last 2 bits of each character.
-            let chars = upcoming & S::splat(0x03);
-            let chars_d = upcoming_d & S::splat(0x03);
-            // Shift remaining characters to the right.
-            upcoming = upcoming >> S::splat(2);
-            upcoming_d = upcoming_d >> S::splat(2);
-            (chars, chars_d)
-        });
+                if i % 16 == delay % 16 {
+                    unsafe { assert_unchecked(read_idx < buf.len()) };
+                    upcoming_d = buf[read_idx];
+                    read_idx += 1;
+                    read_idx &= buf_mask;
+                }
+                // Extract the last 2 bits of each character.
+                let chars = upcoming & S::splat(0x03);
+                let chars_d = upcoming_d & S::splat(0x03);
+                // Shift remaining characters to the right.
+                upcoming = upcoming >> S::splat(2);
+                upcoming_d = upcoming_d >> S::splat(2);
+                (chars, chars_d)
+            },
+        );
 
         (
             it,
@@ -325,7 +341,6 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let n = (num_kmers / L) / 4 * 4;
         let bytes_per_chunk = n / 4;
 
-        let base_ptr = this.seq.as_ptr();
         let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk)).into();
         let mut upcoming = S::ZERO;
         let mut upcoming_d1 = S::ZERO;
@@ -342,47 +357,50 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let mut read_idx2 = (buf_len - delay2 / 16) % buf_len;
 
         let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
-        let it = (0..par_len).map(move |i| {
-            if i % 16 == 0 {
-                if i % 128 == 0 {
-                    // Read a u256 for each lane containing the next 128 characters.
-                    let data: [u32x8; 8] = from_fn(|lane| unsafe {
-                        // FIXME: Can this pagefault?
-                        (base_ptr.add(offsets[lane] + (i / 4)) as *const u32x8).read_unaligned()
-                    });
-                    unsafe {
-                        *TryInto::<&mut [u32x8; 8]>::try_into(
-                            buf.get_unchecked_mut(write_idx..write_idx + 8),
-                        )
-                        .unwrap_unchecked() = transpose(data);
+        let it = (0..par_len).map(
+            #[inline(always)]
+            move |i| {
+                if i % 16 == 0 {
+                    if i % 128 == 0 {
+                        // Read a u256 for each lane containing the next 128 characters.
+                        let data: [u32x8; 8] = from_fn(
+                            #[inline(always)]
+                            |lane| read_slice(this.seq, offsets[lane] + (i / 4)),
+                        );
+                        unsafe {
+                            *TryInto::<&mut [u32x8; 8]>::try_into(
+                                buf.get_unchecked_mut(write_idx..write_idx + 8),
+                            )
+                            .unwrap_unchecked() = transpose(data);
+                        }
                     }
+                    upcoming = buf[write_idx];
+                    write_idx += 1;
+                    write_idx &= buf_mask;
                 }
-                upcoming = buf[write_idx];
-                write_idx += 1;
-                write_idx &= buf_mask;
-            }
-            if i % 16 == delay1 % 16 {
-                unsafe { assert_unchecked(read_idx1 < buf.len()) };
-                upcoming_d1 = buf[read_idx1];
-                read_idx1 += 1;
-                read_idx1 &= buf_mask;
-            }
-            if i % 16 == delay2 % 16 {
-                unsafe { assert_unchecked(read_idx2 < buf.len()) };
-                upcoming_d2 = buf[read_idx2];
-                read_idx2 += 1;
-                read_idx2 &= buf_mask;
-            }
-            // Extract the last 2 bits of each character.
-            let chars = upcoming & S::splat(0x03);
-            let chars_d1 = upcoming_d1 & S::splat(0x03);
-            let chars_d2 = upcoming_d2 & S::splat(0x03);
-            // Shift remaining characters to the right.
-            upcoming = upcoming >> S::splat(2);
-            upcoming_d1 = upcoming_d1 >> S::splat(2);
-            upcoming_d2 = upcoming_d2 >> S::splat(2);
-            (chars, chars_d1, chars_d2)
-        });
+                if i % 16 == delay1 % 16 {
+                    unsafe { assert_unchecked(read_idx1 < buf.len()) };
+                    upcoming_d1 = buf[read_idx1];
+                    read_idx1 += 1;
+                    read_idx1 &= buf_mask;
+                }
+                if i % 16 == delay2 % 16 {
+                    unsafe { assert_unchecked(read_idx2 < buf.len()) };
+                    upcoming_d2 = buf[read_idx2];
+                    read_idx2 += 1;
+                    read_idx2 &= buf_mask;
+                }
+                // Extract the last 2 bits of each character.
+                let chars = upcoming & S::splat(0x03);
+                let chars_d1 = upcoming_d1 & S::splat(0x03);
+                let chars_d2 = upcoming_d2 & S::splat(0x03);
+                // Shift remaining characters to the right.
+                upcoming = upcoming >> S::splat(2);
+                upcoming_d1 = upcoming_d1 >> S::splat(2);
+                upcoming_d2 = upcoming_d2 >> S::splat(2);
+                (chars, chars_d1, chars_d2)
+            },
+        );
 
         (
             it,
