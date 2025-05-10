@@ -196,7 +196,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         // Even buf_len is nice to only have the write==buf_len check once.
         // We also make it the next power of 2, for faster modulo operations.
         // delay/4: number of bp in a u32.
-        let buf_len = (delay / 4 + 8).next_power_of_two();
+        let buf_len = (delay / 4 + 16).next_power_of_two();
         let buf_mask = buf_len - 1;
         let mut buf = vec![S::default(); buf_len];
         let mut write_idx = 0;
@@ -217,7 +217,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
                         );
                         unsafe {
                             let mut_array: &mut [S; L] = buf
-                                .get_unchecked_mut(write_idx..write_idx + 8)
+                                .get_unchecked_mut(write_idx..write_idx + 16)
                                 .try_into()
                                 .unwrap_unchecked();
                             *mut_array = transpose(data);
@@ -271,7 +271,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         // Even buf_len is nice to only have the write==buf_len check once.
         // We also make it the next power of 2, for faster modulo operations.
         // delay/4: number of bp in a u32.
-        let buf_len = (delay2 / 4 + 8).next_power_of_two();
+        let buf_len = (delay2 / 4 + 16).next_power_of_two();
         let buf_mask = buf_len - 1;
         let mut buf = vec![S::default(); buf_len];
         let mut write_idx = 0;
@@ -293,7 +293,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
                         );
                         unsafe {
                             let mut_array: &mut [S; L] = buf
-                                .get_unchecked_mut(write_idx..write_idx + 8)
+                                .get_unchecked_mut(write_idx..write_idx + 16)
                                 .try_into()
                                 .unwrap_unchecked();
                             *mut_array = transpose(data);
