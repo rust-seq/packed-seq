@@ -61,8 +61,8 @@ pub const fn complement_base(base: u8) -> u8 {
 }
 
 /// Complement 8 lanes of 2-bit bases: `0<>2` and `1<>3`.
-pub fn complement_base_simd(base: u32x8) -> u32x8 {
-    base ^ u32x8::splat(2)
+pub fn complement_base_simd(base: S) -> S {
+    base ^ S::splat(2)
 }
 
 impl<'s> PackedSeq<'s> {
@@ -85,10 +85,10 @@ impl<'s> PackedSeq<'s> {
 }
 
 #[inline(always)]
-pub(crate) fn read_slice(seq: &[u8], idx: usize) -> u32x8 {
+pub(crate) fn read_slice(seq: &[u8], idx: usize) -> S {
     // assert!(idx <= seq.len());
-    let mut result = [0u8; 32];
-    let num_bytes = 32.min(seq.len().saturating_sub(idx));
+    let mut result = [0u8; { 4 * L }];
+    let num_bytes = result.len().min(seq.len().saturating_sub(idx));
     unsafe {
         let src = seq.as_ptr().add(idx);
         std::ptr::copy_nonoverlapping(src, result.as_mut_ptr(), num_bytes);
@@ -188,12 +188,12 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let bytes_per_chunk = n / 4;
         let padding = 4 * L * bytes_per_chunk - num_kmers;
 
-        let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk)).into();
-        let mut cur = S::ZERO;
+        let offsets: [usize; L] = from_fn(|l| (l * bytes_per_chunk)).into();
+        let mut cur = S::default();
 
         // Boxed, so it doesn't consume precious registers.
         // Without this, cur is not always inlined into a register.
-        let mut buf = Box::new([S::ZERO; 8]);
+        let mut buf = Box::new([S::default(); L]);
 
         let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
         let it = (0..par_len).map(
@@ -202,7 +202,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                 if i % 16 == 0 {
                     if i % 128 == 0 {
                         // Read a u256 for each lane containing the next 128 characters.
-                        let data: [u32x8; 8] = from_fn(
+                        let data: [S; L] = from_fn(
                             #[inline(always)]
                             |lane| read_slice(this.seq, offsets[lane] + (i / 4)),
                         );
@@ -244,16 +244,16 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let bytes_per_chunk = n / 4;
         let padding = 4 * L * bytes_per_chunk - num_kmers;
 
-        let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk)).into();
-        let mut upcoming = S::ZERO;
-        let mut upcoming_d = S::ZERO;
+        let offsets: [usize; L] = from_fn(|l| (l * bytes_per_chunk)).into();
+        let mut upcoming = S::default();
+        let mut upcoming_d = S::default();
 
         // Even buf_len is nice to only have the write==buf_len check once.
         // We also make it the next power of 2, for faster modulo operations.
         // delay/16: number of bp in a u32.
         let buf_len = (delay / 16 + 8).next_power_of_two();
         let buf_mask = buf_len - 1;
-        let mut buf = vec![S::ZERO; buf_len];
+        let mut buf = vec![S::default(); buf_len];
         let mut write_idx = 0;
         // We compensate for the first delay/16 triggers of the check below that
         // happen before the delay is actually reached.
@@ -266,12 +266,12 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                 if i % 16 == 0 {
                     if i % 128 == 0 {
                         // Read a u256 for each lane containing the next 128 characters.
-                        let data: [u32x8; 8] = from_fn(
+                        let data: [S; L] = from_fn(
                             #[inline(always)]
                             |lane| read_slice(this.seq, offsets[lane] + (i / 4)),
                         );
                         unsafe {
-                            *TryInto::<&mut [u32x8; 8]>::try_into(
+                            *TryInto::<&mut [S; L]>::try_into(
                                 buf.get_unchecked_mut(write_idx..write_idx + 8),
                             )
                             .unwrap_unchecked() = transpose(data);
@@ -319,15 +319,15 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let bytes_per_chunk = n / 4;
         let padding = 4 * L * bytes_per_chunk - num_kmers;
 
-        let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk)).into();
-        let mut upcoming = S::ZERO;
-        let mut upcoming_d1 = S::ZERO;
-        let mut upcoming_d2 = S::ZERO;
+        let offsets: [usize; L] = from_fn(|l| (l * bytes_per_chunk)).into();
+        let mut upcoming = S::default();
+        let mut upcoming_d1 = S::default();
+        let mut upcoming_d2 = S::default();
 
         // Even buf_len is nice to only have the write==buf_len check once.
         let buf_len = (delay2 / 16 + 8).next_power_of_two();
         let buf_mask = buf_len - 1;
-        let mut buf = vec![S::ZERO; buf_len];
+        let mut buf = vec![S::default(); buf_len];
         let mut write_idx = 0;
         // We compensate for the first delay/16 triggers of the check below that
         // happen before the delay is actually reached.
@@ -341,12 +341,12 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                 if i % 16 == 0 {
                     if i % 128 == 0 {
                         // Read a u256 for each lane containing the next 128 characters.
-                        let data: [u32x8; 8] = from_fn(
+                        let data: [S; 16] = from_fn(
                             #[inline(always)]
                             |lane| read_slice(this.seq, offsets[lane] + (i / 4)),
                         );
                         unsafe {
-                            *TryInto::<&mut [u32x8; 8]>::try_into(
+                            *TryInto::<&mut [S; L]>::try_into(
                                 buf.get_unchecked_mut(write_idx..write_idx + 8),
                             )
                             .unwrap_unchecked() = transpose(data);

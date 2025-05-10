@@ -54,27 +54,27 @@ impl<'s> Seq<'s> for &[u8] {
         let n = num_kmers.div_ceil(L);
         let padding = L * n - num_kmers;
 
-        let offsets: [usize; 8] = from_fn(|l| (l * n)).into();
-        let mut cur = S::ZERO;
+        let offsets: [usize; L] = from_fn(|l| (l * n)).into();
+        let mut cur = S::default();
 
         // Boxed, so it doesn't consume precious registers.
         // Without this, cur is not always inlined into a register.
-        let mut buf = Box::new([S::ZERO; 8]);
+        let mut buf = Box::new([S::default(); L]);
 
         let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
         let it = (0..par_len).map(
             #[inline(always)]
             move |i| {
                 if i % 4 == 0 {
-                    if i % 32 == 0 {
+                    if i % (4 * L) == 0 {
                         // Read a u256 for each lane containing the next 32 characters.
-                        let data: [u32x8; 8] = from_fn(
+                        let data: [S; L] = from_fn(
                             #[inline(always)]
                             |lane| read_slice(self, offsets[lane] + i),
                         );
                         *buf = transpose(data);
                     }
-                    cur = buf[(i % 32) / 4];
+                    cur = buf[(i % (4 * L)) / 4];
                 }
                 // Extract the last 2 bits of each character.
                 let chars = cur & S::splat(0xff);
@@ -103,16 +103,16 @@ impl<'s> Seq<'s> for &[u8] {
         let n = num_kmers.div_ceil(L);
         let padding = L * n - num_kmers;
 
-        let offsets: [usize; 8] = from_fn(|l| (l * n)).into();
-        let mut upcoming = S::ZERO;
-        let mut upcoming_d = S::ZERO;
+        let offsets: [usize; L] = from_fn(|l| (l * n)).into();
+        let mut upcoming = S::default();
+        let mut upcoming_d = S::default();
 
         // Even buf_len is nice to only have the write==buf_len check once.
         // We also make it the next power of 2, for faster modulo operations.
         // delay/4: number of bp in a u32.
         let buf_len = (delay / 4 + 8).next_power_of_two();
         let buf_mask = buf_len - 1;
-        let mut buf = vec![S::ZERO; buf_len];
+        let mut buf = vec![S::default(); buf_len];
         let mut write_idx = 0;
         // We compensate for the first delay/16 triggers of the check below that
         // happen before the delay is actually reached.
@@ -123,14 +123,14 @@ impl<'s> Seq<'s> for &[u8] {
             #[inline(always)]
             move |i| {
                 if i % 4 == 0 {
-                    if i % 32 == 0 {
+                    if i % (4 * L) == 0 {
                         // Read a u256 for each lane containing the next 32 characters.
-                        let data: [u32x8; 8] = from_fn(
+                        let data: [S; L] = from_fn(
                             #[inline(always)]
                             |lane| read_slice(self, offsets[lane] + i),
                         );
                         unsafe {
-                            let mut_array: &mut [u32x8; 8] = buf
+                            let mut_array: &mut [S; L] = buf
                                 .get_unchecked_mut(write_idx..write_idx + 8)
                                 .try_into()
                                 .unwrap_unchecked();
@@ -173,18 +173,18 @@ impl<'s> Seq<'s> for &[u8] {
         let n = num_kmers.div_ceil(L);
         let padding = L * n - num_kmers;
 
-        let offsets: [usize; 8] = from_fn(|l| (l * n)).into();
+        let offsets: [usize; L] = from_fn(|l| (l * n)).into();
 
-        let mut upcoming = S::ZERO;
-        let mut upcoming_d1 = S::ZERO;
-        let mut upcoming_d2 = S::ZERO;
+        let mut upcoming = S::default();
+        let mut upcoming_d1 = S::default();
+        let mut upcoming_d2 = S::default();
 
         // Even buf_len is nice to only have the write==buf_len check once.
         // We also make it the next power of 2, for faster modulo operations.
         // delay/4: number of bp in a u32.
         let buf_len = (delay2 / 4 + 8).next_power_of_two();
         let buf_mask = buf_len - 1;
-        let mut buf = vec![S::ZERO; buf_len];
+        let mut buf = vec![S::default(); buf_len];
         let mut write_idx = 0;
         // We compensate for the first delay/16 triggers of the check below that
         // happen before the delay is actually reached.
@@ -196,14 +196,14 @@ impl<'s> Seq<'s> for &[u8] {
             #[inline(always)]
             move |i| {
                 if i % 4 == 0 {
-                    if i % 32 == 0 {
+                    if i % (4 * L) == 0 {
                         // Read a u256 for each lane containing the next 32 characters.
-                        let data: [u32x8; 8] = from_fn(
+                        let data: [S; L] = from_fn(
                             #[inline(always)]
                             |lane| read_slice(self, offsets[lane] + i),
                         );
                         unsafe {
-                            let mut_array: &mut [u32x8; 8] = buf
+                            let mut_array: &mut [S; L] = buf
                                 .get_unchecked_mut(write_idx..write_idx + 8)
                                 .try_into()
                                 .unwrap_unchecked();

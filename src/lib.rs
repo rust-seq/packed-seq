@@ -1,3 +1,4 @@
+#![feature(portable_simd, slice_as_array, stdarch_x86_avx512)]
 //! Types and traits to iterate over (packed) input data.
 //!
 //! The main type is [`PackedSeqVec`], that holds a sequence of 2-bit packed DNA bases. [`PackedSeq`] is a non-owned slice of packed data.
@@ -81,7 +82,7 @@
 //! - `pyo3` enables `derive(pyo3::pyclass)` for `PackedSeqVec` and `AsciiSeqVec`.
 
 /// Functions with architecture-specific implementations.
-mod intrinsics {
+pub mod intrinsics {
     mod transpose;
     pub use transpose::transpose;
 }
@@ -96,9 +97,9 @@ mod packed_seq;
 mod test;
 
 /// A SIMD vector containing 8 u32s.
-pub use wide::u32x8;
+pub use std::simd::u32x16;
 /// The number of lanes in a `u32x8`.
-pub const L: usize = 8;
+pub const L: usize = 16;
 
 pub use ascii_seq::{AsciiSeq, AsciiSeqVec};
 pub use packed_seq::{
@@ -112,4 +113,4 @@ use core::array::from_fn;
 use mem_dbg::{MemDbg, MemSize};
 use rand::{RngCore, SeedableRng};
 use std::{hint::assert_unchecked, ops::Range};
-use wide::u32x8 as S;
+use u32x16 as S;
