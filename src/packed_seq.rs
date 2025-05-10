@@ -200,7 +200,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
             #[inline(always)]
             move |i| {
                 if i % 16 == 0 {
-                    if i % 128 == 0 {
+                    if i % 256 == 0 {
                         // Read a u256 for each lane containing the next 128 characters.
                         let data: [S; L] = from_fn(
                             #[inline(always)]
@@ -208,7 +208,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                         );
                         *buf = transpose(data);
                     }
-                    cur = buf[(i % 128) / 16];
+                    cur = buf[(i % 256) / 16];
                 }
                 // Extract the last 2 bits of each character.
                 let chars = cur & S::splat(0x03);
@@ -264,7 +264,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
             #[inline(always)]
             move |i| {
                 if i % 16 == 0 {
-                    if i % 128 == 0 {
+                    if i % 256 == 0 {
                         // Read a u256 for each lane containing the next 128 characters.
                         let data: [S; L] = from_fn(
                             #[inline(always)]
@@ -272,7 +272,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                         );
                         unsafe {
                             *TryInto::<&mut [S; L]>::try_into(
-                                buf.get_unchecked_mut(write_idx..write_idx + 8),
+                                buf.get_unchecked_mut(write_idx..write_idx + 16),
                             )
                             .unwrap_unchecked() = transpose(data);
                         }
@@ -339,7 +339,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
             #[inline(always)]
             move |i| {
                 if i % 16 == 0 {
-                    if i % 128 == 0 {
+                    if i % 256 == 0 {
                         // Read a u256 for each lane containing the next 128 characters.
                         let data: [S; 16] = from_fn(
                             #[inline(always)]
@@ -347,7 +347,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                         );
                         unsafe {
                             *TryInto::<&mut [S; L]>::try_into(
-                                buf.get_unchecked_mut(write_idx..write_idx + 8),
+                                buf.get_unchecked_mut(write_idx..write_idx + 16),
                             )
                             .unwrap_unchecked() = transpose(data);
                         }
