@@ -251,7 +251,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         // Even buf_len is nice to only have the write==buf_len check once.
         // We also make it the next power of 2, for faster modulo operations.
         // delay/16: number of bp in a u32.
-        let buf_len = (delay / 16 + 8).next_power_of_two();
+        let buf_len = (delay / 16 + 16).next_power_of_two();
         let buf_mask = buf_len - 1;
         let mut buf = vec![S::default(); buf_len];
         let mut write_idx = 0;
@@ -325,7 +325,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let mut upcoming_d2 = S::default();
 
         // Even buf_len is nice to only have the write==buf_len check once.
-        let buf_len = (delay2 / 16 + 8).next_power_of_two();
+        let buf_len = (delay2 / 16 + 16).next_power_of_two();
         let buf_mask = buf_len - 1;
         let mut buf = vec![S::default(); buf_len];
         let mut write_idx = 0;
