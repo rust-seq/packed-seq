@@ -74,6 +74,15 @@
 //! assert_eq!(ascii_bases, bases);
 //! let packed_bases: Vec<u8> = ascii_seq.as_slice().iter_bp().collect();
 //! assert_eq!(packed_bases, bases);
+//!
+//! // Iterate over 8 chunks at the same time.
+//! let seq = b"AAAACCTTGGTTACTG"; // plain ASCII sequence
+//! // chunks:  ^ ^ ^ ^ ^ ^ ^ ^
+//! let (par_iter, padding) = seq.as_slice().par_iter_bp(1);
+//! let mut par_iter_u8 = par_iter.map(|x| x.as_array_ref().map(|c| c as u8));
+//! assert_eq!(par_iter_u8.next(), Some(*b"AACTGTAT"));
+//! assert_eq!(par_iter_u8.next(), Some(*b"AACTGTCG"));
+//! assert_eq!(par_iter_u8.next(), None);
 //! ```
 //!
 //! ## Feature flags
