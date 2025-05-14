@@ -10,13 +10,13 @@ authors = ["Ragnar Groot Koerkamp", "Igor Martayan"]
 description = "Constructing and iterating packed DNA sequences using SIMD"
 
 [dependencies]
-wide = "0.7.32"
+wide = "0.7"
 rand = { version = "0.9", features = ["small_rng"] }
-mem_dbg = "0.2.4"
+mem_dbg = "0.3"
 cfg-if = "1.0.0"
 
 # Optional (de)serialization using epserde.
-epserde = { version = "0.6.1", optional = true }
+epserde = { version = "0.8", optional = true }
 
 # Optional pyclass atrributes for some objects.
-pyo3 = { version = "0.23.4", features = ["extension-module"], optional = true }
+pyo3 = { version = "0.25", features = ["extension-module"], optional = true }
