@@ -265,36 +265,57 @@ fn get(slice: &[u8], i: usize) -> u8 {
 
 #[test]
 fn par_iter_bp_fuzz() {
-    let lens = (0..10)
+    let lens = (0..100)
         .map(|_| random_range(0..10))
-        .chain((0..10).map(|_| random_range(10..100)))
+        .chain((0..100).map(|_| random_range(10..100)))
         .chain((0..10).map(|_| random_range(100..1000)))
         .chain((0..10).map(|_| random_range(1000..10000)));
-    for len in lens {
+    for mut len in lens {
+        eprintln!();
         let seq = AsciiSeqVec::random(len);
         eprintln!("SEQ: {:?}", seq.seq);
         let s = PackedSeqVec::from_ascii(&seq.seq);
-        let context = random_range(1..512);
-        let (head, padding) = s.as_slice().par_iter_bp(context);
-        eprintln!("padding: {padding}");
+
+        let offset = random_range(0..=8.min(len));
+        eprintln!("OFFSET: {offset:?}");
+        let seq = seq.slice(offset..len);
+        let s = s.slice(offset..len);
+        len -= offset;
+
+        let context = random_range(1..=512.min(len).max(1));
+        eprintln!("CONTEXT: {context:?}");
+        let (head, padding) = s.par_iter_bp(context);
         let head = head.collect::<Vec<_>>();
         fn f(x: &[u8; 8]) -> u32x8 {
             let x = x.map(|x| pack_char(x) as u32);
             u32x8::from(x)
         }
 
-        let stride = {
-            let num_kmers = len.saturating_sub(context - 1);
-            num_kmers.div_ceil(L).next_multiple_of(4)
-        };
+        let head_len = head.len();
+        eprintln!("par it len {head_len}");
+        eprintln!("padding: {padding}");
 
+        // Test padding len.
+        assert_eq!(8 * head_len, len + 7 * (context - 1) + padding);
+
+        // Test context overlap.
+        for i in 0..7 {
+            for j in 0..context - 1 {
+                assert_eq!(
+                    head[head_len - (context - 1) + j].as_array_ref()[i],
+                    head[j].as_array_ref()[i + 1],
+                    "Context check failed at {i} {j}"
+                );
+            }
+        }
+
+        let stride = head_len - (context - 1);
         eprintln!("stride {stride}");
-        let len = head.len();
-        eprintln!("len {len}");
+
         assert_eq!(
             head,
-            (0..len)
-                .map(|i| { f(&from_fn(|j| get(&seq.seq, i + stride * j))) })
+            (0..head_len)
+                .map(|i| { f(&from_fn(|j| get(&seq.0, i + stride * j))) })
                 .collect::<Vec<_>>()
         );
     }
@@ -302,44 +323,67 @@ fn par_iter_bp_fuzz() {
 
 #[test]
 fn par_iter_bp_delayed_fuzz() {
-    let lens = (0..10)
+    let lens = (0..100)
         .map(|_| random_range(0..10))
-        .chain((0..10).map(|_| random_range(10..100)))
+        .chain((0..100).map(|_| random_range(10..100)))
         .chain((0..10).map(|_| random_range(100..1000)))
         .chain((0..10).map(|_| random_range(1000..10000)));
-    for len in lens {
+    for mut len in lens {
+        eprintln!();
         let seq = AsciiSeqVec::random(len);
         eprintln!("SEQ: {:?}", seq.seq);
         let s = PackedSeqVec::from_ascii(&seq.seq);
-        let context = random_range(1..512);
+
+        let offset = random_range(0..=8.min(len));
+        // let offset = 0;
+        eprintln!("OFFSET: {offset:?}");
+        let seq = seq.slice(offset..len);
+        let s = s.slice(offset..len);
+        len -= offset;
+
+        let context = random_range(1..=512.min(len).max(1));
+        let context = 1;
         let delay = random_range(0..512);
         eprintln!("LEN {len} CONTEXT {context} DELAY {delay}");
-        let (head, padding) = s.as_slice().par_iter_bp_delayed(context, delay);
+        let (head, padding) = s.par_iter_bp_delayed(context, delay);
         eprintln!("padding: {padding}");
-        let head = head.collect::<Vec<_>>();
+        let mut head = head.collect::<Vec<_>>();
         fn f(x: &[u8; 8], y: &[u8; 8]) -> (u32x8, u32x8) {
             let x = x.map(|x| pack_char(x) as u32);
             let y = y.map(|x| pack_char(x) as u32);
             (u32x8::from(x), u32x8::from(y))
         }
 
-        let stride = {
-            let num_kmers = len.saturating_sub(context - 1);
-            num_kmers.div_ceil(L).next_multiple_of(4)
-        };
+        let head_len = head.len();
+        eprintln!("par it len {head_len}");
+        eprintln!("padding: {padding}");
 
+        // Test padding len.
+        assert_eq!(8 * head_len, len + 7 * (context - 1) + padding);
+
+        // Test context overlap.
+        for i in 0..7 {
+            for j in 0..context - 1 {
+                assert_eq!(
+                    head[head_len - (context - 1) + j].0.as_array_ref()[i],
+                    head[j].0.as_array_ref()[i + 1],
+                    "Context check failed at {i} {j}"
+                );
+            }
+        }
+
+        let stride = head_len - (context - 1);
         eprintln!("stride {stride}");
-        let len = head.len();
-        eprintln!("len {len}");
-        let ans = (0..len)
+
+        let ans = (0..head_len)
             .map(|i| {
                 f(
-                    &from_fn(|j| get(&seq.seq, i + stride * j)),
+                    &from_fn(|j| get(&seq.0, i + stride * j)),
                     &from_fn(|j| {
                         if i < delay {
                             b'A'
                         } else {
-                            get(&seq.seq, (i + stride * j).wrapping_sub(delay))
+                            get(&seq.0, (i + stride * j).wrapping_sub(delay))
                         }
                     }),
                 )
@@ -358,22 +402,29 @@ fn par_iter_bp_delayed_fuzz() {
 
 #[test]
 fn par_iter_bp_delayed2_fuzz() {
-    let lens = (0..10)
+    let lens = (0..100)
         .map(|_| random_range(0..10))
-        .chain((0..10).map(|_| random_range(10..100)))
+        .chain((0..100).map(|_| random_range(10..100)))
         .chain((0..10).map(|_| random_range(100..1000)))
         .chain((0..10).map(|_| random_range(1000..10000)));
-    for len in lens {
+    for mut len in lens {
         let seq = AsciiSeqVec::random(len);
         eprintln!("SEQ: {:?}", seq.seq);
         let s = PackedSeqVec::from_ascii(&seq.seq);
-        let context = random_range(1..512);
+
+        let offset = random_range(0..=8.min(len));
+        eprintln!("OFFSET: {offset:?}");
+        let seq = seq.slice(offset..len);
+        let s = s.slice(offset..len);
+        len -= offset;
+
+        let context = random_range(1..=512.min(len).max(1));
         let delay = random_range(0..512);
         let delay2 = random_range(delay..=512);
         eprintln!("LEN {len} CONTEXT {context} DELAY {delay}");
-        let (head, padding) = s.as_slice().par_iter_bp_delayed_2(context, delay, delay2);
+        let (head, padding) = s.par_iter_bp_delayed_2(context, delay, delay2);
         eprintln!("padding: {padding}");
-        let head = head.collect::<Vec<_>>();
+        let mut head = head.collect::<Vec<_>>();
         fn f(x: &[u8; 8], y: &[u8; 8], z: &[u8; 8]) -> (u32x8, u32x8, u32x8) {
             let x = x.map(|x| pack_char(x) as u32);
             let y = y.map(|x| pack_char(x) as u32);
@@ -381,38 +432,56 @@ fn par_iter_bp_delayed2_fuzz() {
             (u32x8::from(x), u32x8::from(y), u32x8::from(z))
         }
 
-        let stride = {
-            let num_kmers = len.saturating_sub(context - 1);
-            num_kmers.div_ceil(L).next_multiple_of(4)
-        };
+        let head_len = head.len();
+        eprintln!("par it len {head_len}");
+        eprintln!("padding: {padding}");
 
+        // Test padding len.
+        assert_eq!(8 * head_len, len + 7 * (context - 1) + padding);
+
+        // Test context overlap.
+        for i in 0..7 {
+            for j in 0..context - 1 {
+                assert_eq!(
+                    head[head_len - (context - 1) + j].0.as_array_ref()[i],
+                    head[j].0.as_array_ref()[i + 1],
+                    "Context check failed at {i} {j}"
+                );
+            }
+        }
+
+        let stride = head_len - (context - 1);
         eprintln!("stride {stride}");
-        let len = head.len();
-        eprintln!("len {len}");
-        assert_eq!(
-            head,
-            (0..len)
-                .map(|i| {
-                    f(
-                        &from_fn(|j| get(&seq.seq, i + stride * j)),
-                        &from_fn(|j| {
-                            if i < delay {
-                                b'A'
-                            } else {
-                                get(&seq.seq, i + stride * j - delay)
-                            }
-                        }),
-                        &from_fn(|j| {
-                            if i < delay2 {
-                                b'A'
-                            } else {
-                                get(&seq.seq, i + stride * j - delay2)
-                            }
-                        }),
-                    )
-                })
-                .collect::<Vec<_>>()
-        );
+
+        let ans = (0..head_len)
+            .map(|i| {
+                f(
+                    &from_fn(|j| get(&seq.0, i + stride * j)),
+                    &from_fn(|j| {
+                        if i < delay {
+                            b'A'
+                        } else {
+                            get(&seq.0, i + stride * j - delay)
+                        }
+                    }),
+                    &from_fn(|j| {
+                        if i < delay2 {
+                            b'A'
+                        } else {
+                            get(&seq.0, i + stride * j - delay2)
+                        }
+                    }),
+                )
+            })
+            .collect::<Vec<_>>();
+        if head != ans {
+            for (i, (x, y)) in head.iter().zip(ans.iter()).enumerate() {
+                if x != y {
+                    eprintln!("head {i} {x:?} != {y:?}");
+                }
+            }
+        }
+        assert!(head == ans);
     }
 }
 

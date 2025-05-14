@@ -181,12 +181,13 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         panic!("Big endian architectures are not supported.");
 
         let this = self.normalize();
-        assert_eq!(this.offset, 0, "Non-byte offsets are not yet supported.");
+        let o = this.offset;
+        assert!(o < 4);
 
-        let num_kmers = this.len.saturating_sub(context - 1);
+        let num_kmers = (this.len + o).saturating_sub(context - 1);
         let n = num_kmers.div_ceil(L).next_multiple_of(4);
         let bytes_per_chunk = n / 4;
-        let padding = 4 * L * bytes_per_chunk - num_kmers;
+        let padding = 4 * L * bytes_per_chunk - num_kmers + o;
 
         let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk)).into();
         let mut cur = S::ZERO;
@@ -195,8 +196,13 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         // Without this, cur is not always inlined into a register.
         let mut buf = Box::new([S::ZERO; 8]);
 
-        let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
-        let it = (0..par_len).map(
+        // We skip the first o iterations.
+        let par_len = if num_kmers == 0 {
+            0
+        } else {
+            n + context + o - 1
+        };
+        let mut it = (0..par_len).map(
             #[inline(always)]
             move |i| {
                 if i % 16 == 0 {
@@ -217,10 +223,14 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                 chars
             },
         );
+        // Drop the first few chars.
+        it.by_ref().take(o).for_each(drop);
 
         (it, padding)
     }
 
+    /// NOTE: When `self` starts does not start at a byte boundary, the
+    /// 'delayed' character is not guaranteed to be `0`.
     #[inline(always)]
     fn par_iter_bp_delayed(
         self,
@@ -237,12 +247,13 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         );
 
         let this = self.normalize();
-        assert_eq!(this.offset, 0, "Non-byte offsets are not yet supported.");
+        let o = this.offset;
+        assert!(o < 4);
 
-        let num_kmers = this.len.saturating_sub(context - 1);
+        let num_kmers = (this.len + o).saturating_sub(context - 1);
         let n = num_kmers.div_ceil(L).next_multiple_of(4);
         let bytes_per_chunk = n / 4;
-        let padding = 4 * L * bytes_per_chunk - num_kmers;
+        let padding = 4 * L * bytes_per_chunk - num_kmers + o;
 
         let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk)).into();
         let mut upcoming = S::ZERO;
@@ -259,8 +270,12 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         // happen before the delay is actually reached.
         let mut read_idx = (buf_len - delay / 16) % buf_len;
 
-        let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
-        let it = (0..par_len).map(
+        let par_len = if num_kmers == 0 {
+            0
+        } else {
+            n + context + o - 1
+        };
+        let mut it = (0..par_len).map(
             #[inline(always)]
             move |i| {
                 if i % 16 == 0 {
@@ -275,6 +290,12 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                                 buf.get_unchecked_mut(write_idx..write_idx + 8),
                             )
                             .unwrap_unchecked() = transpose(data);
+                        }
+                        if i == 0 {
+                            // Mask out chars before the offset.
+                            let elem = !((1u32 << (2 * o)) - 1);
+                            let mask = S::splat(elem);
+                            buf[write_idx] &= mask;
                         }
                     }
                     upcoming = buf[write_idx];
@@ -296,10 +317,13 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                 (chars, chars_d)
             },
         );
+        it.by_ref().take(o).for_each(drop);
 
         (it, padding)
     }
 
+    /// NOTE: When `self` starts does not start at a byte boundary, the
+    /// 'delayed' character is not guaranteed to be `0`.
     #[inline(always)]
     fn par_iter_bp_delayed_2(
         self,
@@ -311,13 +335,14 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         panic!("Big endian architectures are not supported.");
 
         let this = self.normalize();
-        assert_eq!(this.offset, 0, "Non-byte offsets are not yet supported.");
+        let o = this.offset;
+        assert!(o < 4);
         assert!(delay1 <= delay2, "Delay1 must be at most delay2.");
 
-        let num_kmers = this.len.saturating_sub(context - 1);
+        let num_kmers = (this.len + o).saturating_sub(context - 1);
         let n = num_kmers.div_ceil(L).next_multiple_of(4);
         let bytes_per_chunk = n / 4;
-        let padding = 4 * L * bytes_per_chunk - num_kmers;
+        let padding = 4 * L * bytes_per_chunk - num_kmers + o;
 
         let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk)).into();
         let mut upcoming = S::ZERO;
@@ -334,8 +359,12 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let mut read_idx1 = (buf_len - delay1 / 16) % buf_len;
         let mut read_idx2 = (buf_len - delay2 / 16) % buf_len;
 
-        let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
-        let it = (0..par_len).map(
+        let par_len = if num_kmers == 0 {
+            0
+        } else {
+            n + context + o - 1
+        };
+        let mut it = (0..par_len).map(
             #[inline(always)]
             move |i| {
                 if i % 16 == 0 {
@@ -350,6 +379,12 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                                 buf.get_unchecked_mut(write_idx..write_idx + 8),
                             )
                             .unwrap_unchecked() = transpose(data);
+                        }
+                        if i == 0 {
+                            // Mask out chars before the offset.
+                            let elem = !((1u32 << (2 * o)) - 1);
+                            let mask = S::splat(elem);
+                            buf[write_idx] &= mask;
                         }
                     }
                     upcoming = buf[write_idx];
@@ -379,6 +414,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                 (chars, chars_d1, chars_d2)
             },
         );
+        it.by_ref().take(o).for_each(drop);
 
         (it, padding)
     }
