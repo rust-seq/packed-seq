@@ -184,10 +184,16 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let o = this.offset;
         assert!(o < 4);
 
-        let num_kmers = (this.len + o).saturating_sub(context - 1);
-        let n = num_kmers.div_ceil(L).next_multiple_of(4);
+        let num_kmers = if this.len == 0 {
+            0
+        } else {
+            (this.len + o).saturating_sub(context - 1)
+        };
+        // without +o, since we don't need them in the stride.
+        let num_kmers_stride = this.len.saturating_sub(context - 1);
+        let n = num_kmers_stride.div_ceil(L).next_multiple_of(4);
         let bytes_per_chunk = n / 4;
-        let padding = 4 * L * bytes_per_chunk - num_kmers + o;
+        let padding = 4 * L * bytes_per_chunk - num_kmers_stride;
 
         let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk)).into();
         let mut cur = S::ZERO;
@@ -250,10 +256,16 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let o = this.offset;
         assert!(o < 4);
 
-        let num_kmers = (this.len + o).saturating_sub(context - 1);
-        let n = num_kmers.div_ceil(L).next_multiple_of(4);
+        let num_kmers = if this.len == 0 {
+            0
+        } else {
+            (this.len + o).saturating_sub(context - 1)
+        };
+        // without +o, since we don't need them in the stride.
+        let num_kmers_stride = this.len.saturating_sub(context - 1);
+        let n = num_kmers_stride.div_ceil(L).next_multiple_of(4);
         let bytes_per_chunk = n / 4;
-        let padding = 4 * L * bytes_per_chunk - num_kmers + o;
+        let padding = 4 * L * bytes_per_chunk - num_kmers_stride;
 
         let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk)).into();
         let mut upcoming = S::ZERO;
@@ -339,10 +351,16 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         assert!(o < 4);
         assert!(delay1 <= delay2, "Delay1 must be at most delay2.");
 
-        let num_kmers = (this.len + o).saturating_sub(context - 1);
-        let n = num_kmers.div_ceil(L).next_multiple_of(4);
+        let num_kmers = if this.len == 0 {
+            0
+        } else {
+            (this.len + o).saturating_sub(context - 1)
+        };
+        // without +o, since we don't need them in the stride.
+        let num_kmers_stride = this.len.saturating_sub(context - 1);
+        let n = num_kmers_stride.div_ceil(L).next_multiple_of(4);
         let bytes_per_chunk = n / 4;
-        let padding = 4 * L * bytes_per_chunk - num_kmers + o;
+        let padding = 4 * L * bytes_per_chunk - num_kmers_stride;
 
         let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk)).into();
         let mut upcoming = S::ZERO;

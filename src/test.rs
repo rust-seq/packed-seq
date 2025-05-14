@@ -297,6 +297,7 @@ fn par_iter_bp_fuzz() {
 
         // Test padding len.
         assert_eq!(8 * head_len, len + 7 * (context - 1) + padding);
+        assert!(padding < 32);
 
         // Test context overlap.
         for i in 0..7 {
@@ -360,6 +361,7 @@ fn par_iter_bp_delayed_fuzz() {
 
         // Test padding len.
         assert_eq!(8 * head_len, len + 7 * (context - 1) + padding);
+        assert!(padding < 32);
 
         // Test context overlap.
         for i in 0..7 {
@@ -438,6 +440,7 @@ fn par_iter_bp_delayed2_fuzz() {
 
         // Test padding len.
         assert_eq!(8 * head_len, len + 7 * (context - 1) + padding);
+        assert!(padding < 32);
 
         // Test context overlap.
         for i in 0..7 {
