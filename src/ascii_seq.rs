@@ -77,6 +77,11 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         val as usize
     }
 
+    #[inline(always)]
+    fn to_word_revcomp(&self) -> usize {
+        Self::revcomp_word(self.to_word(), self.len())
+    }
+
     /// Convert to an owned version.
     fn to_vec(&self) -> AsciiSeqVec {
         AsciiSeqVec {

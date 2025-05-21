@@ -119,6 +119,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         unpack_base(self.get(index))
     }
 
+    /// Convert a short sequence (kmer) to a packed representation as `usize`.
     /// Panics if `self` is longer than 29 characters.
     #[inline(always)]
     fn to_word(&self) -> usize {
@@ -126,6 +127,19 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let mask = usize::MAX >> (64 - 2 * self.len());
         unsafe {
             ((self.seq.as_ptr() as *const usize).read_unaligned() >> (2 * self.offset)) & mask
+        }
+    }
+
+    /// Convert a short sequence (kmer) to a packed representation of its reverse complement as `usize`.
+    /// Panics if `self` is longer than 29 characters.
+    #[inline(always)]
+    fn to_word_revcomp(&self) -> usize {
+        debug_assert!(self.len() <= usize::BITS as usize / 2 - 3);
+        unsafe {
+            Self::revcomp_word(
+                (self.seq.as_ptr() as *const usize).read_unaligned() >> (2 * self.offset),
+                self.len(),
+            )
         }
     }
 

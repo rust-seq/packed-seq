@@ -38,6 +38,30 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     /// Convert a short sequence (kmer) to a packed representation as `usize`.
     fn to_word(&self) -> usize;
 
+    /// Convert a short sequence (kmer) to a packed representation of its reverse complement as `usize`.
+    fn to_word_revcomp(&self) -> usize;
+
+    /// Compute the reverse complement of a short sequence packed in a `usize`.
+    #[inline(always)]
+    fn revcomp_word(word: usize, len: usize) -> usize {
+        #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+        {
+            let mut res = word.reverse_bits(); // ARM can reverse bits in a single instruction
+            res = ((res >> 1) & 0x5555_5555_5555_5555) | ((res & 0x5555_5555_5555_5555) << 1);
+            res ^= 0xAAAA_AAAA_AAAA_AAAA;
+            res >> (usize::BITS as usize - 2 * len)
+        }
+
+        #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
+        {
+            let mut res = word.swap_bytes();
+            res = ((res >> 4) & 0x0F0F_0F0F_0F0F_0F0F) | ((res & 0x0F0F_0F0F_0F0F_0F0F) << 4);
+            res = ((res >> 2) & 0x3333_3333_3333_3333) | ((res & 0x3333_3333_3333_3333) << 2);
+            res ^= 0xAAAA_AAAA_AAAA_AAAA;
+            res >> (usize::BITS as usize - 2 * len)
+        }
+    }
+
     /// Convert to an owned version.
     fn to_vec(&self) -> Self::SeqVec;
 
