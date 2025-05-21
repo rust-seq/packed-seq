@@ -523,3 +523,26 @@ fn slice_get() {
     let get = (0..n).map(|i| s.as_slice().get(i)).collect::<Vec<_>>();
     assert_eq!(iter_bp, get);
 }
+
+#[test]
+fn rc_rc() {
+    let n = 10000;
+    let seq = PackedSeqVec::random(n);
+    for k in 1..=29 {
+        for i in 0..=(n - k) {
+            let word = seq.slice(i..i + k).to_word();
+            let rc = seq.slice(i..i + k).to_word_revcomp();
+            assert_eq!(PackedSeq::revcomp_word(word, k), rc, "k={k} i={i}");
+            assert_eq!(PackedSeq::revcomp_word(rc, k), word, "k={k} i={i}");
+        }
+    }
+    let seq = AsciiSeqVec::random(n);
+    for k in 1..=32 {
+        for i in 0..=(n - k) {
+            let word = seq.slice(i..i + k).to_word();
+            let rc = seq.slice(i..i + k).to_word_revcomp();
+            assert_eq!(AsciiSeq::revcomp_word(word, k), rc, "k={k} i={i}");
+            assert_eq!(AsciiSeq::revcomp_word(rc, k), word, "k={k} i={i}");
+        }
+    }
+}

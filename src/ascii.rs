@@ -31,6 +31,11 @@ impl<'s> Seq<'s> for &[u8] {
         unsafe { (self.as_ptr() as *const usize).read_unaligned() & mask }
     }
 
+    #[inline(always)]
+    fn to_word_revcomp(&self) -> usize {
+        unimplemented!("Reverse complement is only defined for DNA sequences, use `AsciiSeq` or `PackedSeq` instead.")
+    }
+
     /// Convert to an owned version.
     fn to_vec(&self) -> Vec<u8> {
         <[u8]>::to_vec(self)
