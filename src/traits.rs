@@ -29,6 +29,9 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     /// The length of the sequence in characters.
     fn len(&self) -> usize;
 
+    /// Returns `true` if the sequence is empty.
+    fn is_empty(&self) -> bool;
+
     /// Get the character at the given index.
     fn get(&self, _index: usize) -> u8;
 
@@ -171,6 +174,11 @@ pub trait SeqVec:
     /// The length of the sequence in characters.
     fn len(&self) -> usize {
         self.as_slice().len()
+    }
+
+    /// Returns `true` if the sequence is empty.
+    fn is_empty(&self) -> bool {
+        self.as_slice().is_empty()
     }
 
     /// Convert into the underlying raw representation.

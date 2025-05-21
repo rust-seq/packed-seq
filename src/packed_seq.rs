@@ -65,7 +65,7 @@ pub fn complement_base_simd(base: u32x8) -> u32x8 {
     base ^ u32x8::splat(2)
 }
 
-impl<'s> PackedSeq<'s> {
+impl PackedSeq<'_> {
     /// Shrink `seq` to only just cover the data.
     #[inline(always)]
     pub fn normalize(&self) -> Self {
@@ -104,6 +104,11 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
     #[inline(always)]
     fn len(&self) -> usize {
         self.len
+    }
+
+    #[inline(always)]
+    fn is_empty(&self) -> bool {
+        self.len == 0
     }
 
     #[inline(always)]
@@ -209,7 +214,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let bytes_per_chunk = n / 4;
         let padding = 4 * L * bytes_per_chunk - num_kmers_stride;
 
-        let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk)).into();
+        let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk));
         let mut cur = S::ZERO;
 
         // Boxed, so it doesn't consume precious registers.
@@ -281,7 +286,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let bytes_per_chunk = n / 4;
         let padding = 4 * L * bytes_per_chunk - num_kmers_stride;
 
-        let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk)).into();
+        let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk));
         let mut upcoming = S::ZERO;
         let mut upcoming_d = S::ZERO;
 
@@ -376,7 +381,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let bytes_per_chunk = n / 4;
         let padding = 4 * L * bytes_per_chunk - num_kmers_stride;
 
-        let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk)).into();
+        let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk));
         let mut upcoming = S::ZERO;
         let mut upcoming_d1 = S::ZERO;
         let mut upcoming_d2 = S::ZERO;
@@ -489,7 +494,7 @@ impl PartialEq for PackedSeq<'_> {
                 return false;
             }
         }
-        return true;
+        true
     }
 }
 
@@ -609,6 +614,6 @@ impl SeqVec for PackedSeqVec {
     fn random(n: usize) -> Self {
         let mut seq = vec![0; n.div_ceil(4)];
         rand::rngs::SmallRng::from_os_rng().fill_bytes(&mut seq);
-        PackedSeqVec { seq, len: n }
+        Self { seq, len: n }
     }
 }

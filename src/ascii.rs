@@ -4,7 +4,7 @@ use super::*;
 
 /// Maps ASCII to `[0, 4)` on the fly.
 /// Prefer first packing into a `PackedSeqVec` for storage.
-impl<'s> Seq<'s> for &[u8] {
+impl Seq<'_> for &[u8] {
     const BASES_PER_BYTE: usize = 1;
     const BITS_PER_CHAR: usize = 8;
     type SeqVec = Vec<u8>;
@@ -12,6 +12,11 @@ impl<'s> Seq<'s> for &[u8] {
     #[inline(always)]
     fn len(&self) -> usize {
         <[u8]>::len(self)
+    }
+
+    #[inline(always)]
+    fn is_empty(&self) -> bool {
+        <[u8]>::is_empty(self)
     }
 
     #[inline(always)]
@@ -59,7 +64,7 @@ impl<'s> Seq<'s> for &[u8] {
         let n = num_kmers.div_ceil(L);
         let padding = L * n - num_kmers;
 
-        let offsets: [usize; 8] = from_fn(|l| (l * n)).into();
+        let offsets: [usize; 8] = from_fn(|l| (l * n));
         let mut cur = S::ZERO;
 
         // Boxed, so it doesn't consume precious registers.
@@ -108,7 +113,7 @@ impl<'s> Seq<'s> for &[u8] {
         let n = num_kmers.div_ceil(L);
         let padding = L * n - num_kmers;
 
-        let offsets: [usize; 8] = from_fn(|l| (l * n)).into();
+        let offsets: [usize; 8] = from_fn(|l| (l * n));
         let mut upcoming = S::ZERO;
         let mut upcoming_d = S::ZERO;
 
@@ -178,7 +183,7 @@ impl<'s> Seq<'s> for &[u8] {
         let n = num_kmers.div_ceil(L);
         let padding = L * n - num_kmers;
 
-        let offsets: [usize; 8] = from_fn(|l| (l * n)).into();
+        let offsets: [usize; 8] = from_fn(|l| (l * n));
 
         let mut upcoming = S::ZERO;
         let mut upcoming_d1 = S::ZERO;

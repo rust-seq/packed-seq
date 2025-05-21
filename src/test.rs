@@ -316,7 +316,7 @@ fn par_iter_bp_fuzz() {
         assert_eq!(
             head,
             (0..head_len)
-                .map(|i| { f(&from_fn(|j| get(&seq.0, i + stride * j))) })
+                .map(|i| { f(&from_fn(|j| get(seq.0, i + stride * j))) })
                 .collect::<Vec<_>>()
         );
     }
@@ -342,13 +342,13 @@ fn par_iter_bp_delayed_fuzz() {
         let s = s.slice(offset..len);
         len -= offset;
 
-        let context = random_range(1..=512.min(len).max(1));
+        // let context = random_range(1..=512.min(len).max(1));
         let context = 1;
         let delay = random_range(0..512);
         eprintln!("LEN {len} CONTEXT {context} DELAY {delay}");
         let (head, padding) = s.par_iter_bp_delayed(context, delay);
         eprintln!("padding: {padding}");
-        let mut head = head.collect::<Vec<_>>();
+        let head = head.collect::<Vec<_>>();
         fn f(x: &[u8; 8], y: &[u8; 8]) -> (u32x8, u32x8) {
             let x = x.map(|x| pack_char(x) as u32);
             let y = y.map(|x| pack_char(x) as u32);
@@ -380,12 +380,12 @@ fn par_iter_bp_delayed_fuzz() {
         let ans = (0..head_len)
             .map(|i| {
                 f(
-                    &from_fn(|j| get(&seq.0, i + stride * j)),
+                    &from_fn(|j| get(seq.0, i + stride * j)),
                     &from_fn(|j| {
                         if i < delay {
                             b'A'
                         } else {
-                            get(&seq.0, (i + stride * j).wrapping_sub(delay))
+                            get(seq.0, (i + stride * j).wrapping_sub(delay))
                         }
                     }),
                 )
@@ -426,7 +426,7 @@ fn par_iter_bp_delayed2_fuzz() {
         eprintln!("LEN {len} CONTEXT {context} DELAY {delay}");
         let (head, padding) = s.par_iter_bp_delayed_2(context, delay, delay2);
         eprintln!("padding: {padding}");
-        let mut head = head.collect::<Vec<_>>();
+        let head = head.collect::<Vec<_>>();
         fn f(x: &[u8; 8], y: &[u8; 8], z: &[u8; 8]) -> (u32x8, u32x8, u32x8) {
             let x = x.map(|x| pack_char(x) as u32);
             let y = y.map(|x| pack_char(x) as u32);
@@ -459,19 +459,19 @@ fn par_iter_bp_delayed2_fuzz() {
         let ans = (0..head_len)
             .map(|i| {
                 f(
-                    &from_fn(|j| get(&seq.0, i + stride * j)),
+                    &from_fn(|j| get(seq.0, i + stride * j)),
                     &from_fn(|j| {
                         if i < delay {
                             b'A'
                         } else {
-                            get(&seq.0, i + stride * j - delay)
+                            get(seq.0, i + stride * j - delay)
                         }
                     }),
                     &from_fn(|j| {
                         if i < delay2 {
                             b'A'
                         } else {
-                            get(&seq.0, i + stride * j - delay2)
+                            get(seq.0, i + stride * j - delay2)
                         }
                     }),
                 )

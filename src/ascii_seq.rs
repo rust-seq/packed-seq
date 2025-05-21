@@ -33,6 +33,11 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
     }
 
     #[inline(always)]
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    #[inline(always)]
     fn get(&self, index: usize) -> u8 {
         pack_char(self.0[index])
     }
@@ -137,7 +142,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         let n = num_kmers.div_ceil(L);
         let padding = L * n - num_kmers;
 
-        let offsets: [usize; 8] = from_fn(|l| (l * n)).into();
+        let offsets: [usize; 8] = from_fn(|l| (l * n));
         let mut cur = S::ZERO;
 
         // Boxed, so it doesn't consume precious registers.
@@ -194,7 +199,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         );
         let padding = L * n - num_kmers;
 
-        let offsets: [usize; 8] = from_fn(|l| (l * n)).into();
+        let offsets: [usize; 8] = from_fn(|l| (l * n));
         let mut upcoming = S::ZERO;
         let mut upcoming_d = S::ZERO;
 
@@ -267,7 +272,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         let n = num_kmers.div_ceil(L);
         let padding = L * n - num_kmers;
 
-        let offsets: [usize; 8] = from_fn(|l| (l * n)).into();
+        let offsets: [usize; 8] = from_fn(|l| (l * n));
 
         let mut upcoming = S::ZERO;
         let mut upcoming_d1 = S::ZERO;
@@ -350,7 +355,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
 }
 
 impl AsciiSeqVec {
-    pub fn from_vec(seq: Vec<u8>) -> Self {
+    pub const fn from_vec(seq: Vec<u8>) -> Self {
         Self { seq }
     }
 }
