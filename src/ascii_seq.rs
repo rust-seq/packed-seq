@@ -192,11 +192,6 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
 
         let num_kmers = self.len().saturating_sub(context - 1);
         let n = num_kmers.div_ceil(L);
-        eprintln!(
-            "len {} kmers {num_kmers} n {n} total out {}",
-            self.len(),
-            L * n
-        );
         let padding = L * n - num_kmers;
 
         let offsets: [usize; 8] = from_fn(|l| (l * n));
