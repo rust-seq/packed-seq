@@ -11,12 +11,18 @@ description = "Constructing and iterating packed DNA sequences using SIMD"
 
 [dependencies]
 wide = "0.7"
-rand = { version = "0.9", features = ["small_rng"] }
 mem_dbg = "0.3"
 cfg-if = "1.0.0"
+
+# Optional generate random sequences for testing. (Default enabled.)
+rand = { version = "0.9", features = ["small_rng"], optional = true }
 
 # Optional (de)serialization using epserde.
 epserde = { version = "0.8", optional = true }
 
 # Optional pyclass atrributes for some objects.
 pyo3 = { version = "0.25", features = ["extension-module"], optional = true }
+
+[features]
+# Also needed for tests.
+default = ["rand"]

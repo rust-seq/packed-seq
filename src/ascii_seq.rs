@@ -380,7 +380,10 @@ impl SeqVec for AsciiSeqVec {
         self.push_seq(AsciiSeq(seq))
     }
 
+    #[cfg(feature = "rand")]
     fn random(n: usize) -> Self {
+        use rand::{RngCore, SeedableRng};
+
         let mut seq = vec![0; n];
         rand::rngs::SmallRng::from_os_rng().fill_bytes(&mut seq);
         Self {

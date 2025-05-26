@@ -1,4 +1,4 @@
-use rand::random_range;
+use rand::{random_range, Rng};
 use wide::u32x8;
 
 use super::*;
@@ -20,9 +20,6 @@ fn pack_naive(seq: &[u8]) -> (Vec<u8>, usize) {
     }
     (packed, packed_len)
 }
-
-#[cfg(test)]
-use rand::Rng;
 
 #[test]
 fn pack() {

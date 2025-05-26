@@ -185,6 +185,7 @@ pub trait SeqVec:
     fn into_raw(self) -> Vec<u8>;
 
     /// Generate a random sequence with the given number of characters.
+    #[cfg(feature = "rand")]
     fn random(n: usize) -> Self;
 
     /// Create a `SeqVec` from ASCII input.

@@ -119,6 +119,5 @@ pub use traits::{Seq, SeqVec};
 // For internal use only.
 use core::array::from_fn;
 use mem_dbg::{MemDbg, MemSize};
-use rand::{RngCore, SeedableRng};
 use std::{hint::assert_unchecked, ops::Range};
 use wide::u32x8 as S;
