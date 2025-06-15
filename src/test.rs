@@ -54,20 +54,20 @@ fn pack_via_ascii() {
 fn pack_word() {
     let packed = PackedSeqVec::from_ascii(b"ACGTACGTACGTACGTACGTACGTACGT");
     let slice = packed.slice(0..1);
-    assert_eq!(slice.to_word(), 0b00000000);
+    assert_eq!(slice.as_u64(), 0b00000000);
     let slice = packed.slice(0..2);
-    assert_eq!(slice.to_word(), 0b00000100);
+    assert_eq!(slice.as_u64(), 0b00000100);
     let slice = packed.slice(0..3);
-    assert_eq!(slice.to_word(), 0b00110100);
+    assert_eq!(slice.as_u64(), 0b00110100);
     let slice = packed.slice(0..4);
-    assert_eq!(slice.to_word(), 0b10110100);
+    assert_eq!(slice.as_u64(), 0b10110100);
     let slice = packed.slice(0..8);
-    assert_eq!(slice.to_word(), 0b1011010010110100);
+    assert_eq!(slice.as_u64(), 0b1011010010110100);
     let slice = packed.slice(0..16);
-    assert_eq!(slice.to_word(), 0b10110100101101001011010010110100);
+    assert_eq!(slice.as_u64(), 0b10110100101101001011010010110100);
     let slice = packed.slice(0..28);
     assert_eq!(
-        slice.to_word(),
+        slice.as_u64(),
         0b10110100101101001011010010110100101101001011010010110100
     );
 }
@@ -527,19 +527,19 @@ fn rc_rc() {
     let seq = PackedSeqVec::random(n);
     for k in 1..=29 {
         for i in 0..=(n - k) {
-            let word = seq.slice(i..i + k).to_word();
-            let rc = seq.slice(i..i + k).to_word_revcomp();
-            assert_eq!(PackedSeq::revcomp_word(word, k), rc, "k={k} i={i}");
-            assert_eq!(PackedSeq::revcomp_word(rc, k), word, "k={k} i={i}");
+            let word = seq.slice(i..i + k).as_u64();
+            let rc = seq.slice(i..i + k).revcomp_as_u64();
+            assert_eq!(PackedSeq::revcomp_u64(word, k), rc, "k={k} i={i}");
+            assert_eq!(PackedSeq::revcomp_u64(rc, k), word, "k={k} i={i}");
         }
     }
     let seq = AsciiSeqVec::random(n);
     for k in 1..=32 {
         for i in 0..=(n - k) {
-            let word = seq.slice(i..i + k).to_word();
-            let rc = seq.slice(i..i + k).to_word_revcomp();
-            assert_eq!(AsciiSeq::revcomp_word(word, k), rc, "k={k} i={i}");
-            assert_eq!(AsciiSeq::revcomp_word(rc, k), word, "k={k} i={i}");
+            let word = seq.slice(i..i + k).as_u64();
+            let rc = seq.slice(i..i + k).revcomp_as_u64();
+            assert_eq!(AsciiSeq::revcomp_u64(word, k), rc, "k={k} i={i}");
+            assert_eq!(AsciiSeq::revcomp_u64(rc, k), word, "k={k} i={i}");
         }
     }
 }

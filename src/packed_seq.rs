@@ -127,22 +127,20 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
     /// Convert a short sequence (kmer) to a packed representation as `usize`.
     /// Panics if `self` is longer than 29 characters.
     #[inline(always)]
-    fn to_word(&self) -> usize {
-        debug_assert!(self.len() <= usize::BITS as usize / 2 - 3);
-        let mask = usize::MAX >> (64 - 2 * self.len());
-        unsafe {
-            ((self.seq.as_ptr() as *const usize).read_unaligned() >> (2 * self.offset)) & mask
-        }
+    fn as_u64(&self) -> u64 {
+        debug_assert!(self.len() <= u64::BITS as usize / 2 - 3);
+        let mask = u64::MAX >> (64 - 2 * self.len());
+        unsafe { ((self.seq.as_ptr() as *const u64).read_unaligned() >> (2 * self.offset)) & mask }
     }
 
     /// Convert a short sequence (kmer) to a packed representation of its reverse complement as `usize`.
     /// Panics if `self` is longer than 29 characters.
     #[inline(always)]
-    fn to_word_revcomp(&self) -> usize {
-        debug_assert!(self.len() <= usize::BITS as usize / 2 - 3);
+    fn revcomp_as_u64(&self) -> u64 {
+        debug_assert!(self.len() <= u64::BITS as usize / 2 - 3);
         unsafe {
-            Self::revcomp_word(
-                (self.seq.as_ptr() as *const usize).read_unaligned() >> (2 * self.offset),
+            Self::revcomp_u64(
+                (self.seq.as_ptr() as *const u64).read_unaligned() >> (2 * self.offset),
                 self.len(),
             )
         }
@@ -464,8 +462,8 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
             let len = (min_len - i).min(29);
             let this = self.slice(i..i + len);
             let other = other.slice(i..i + len);
-            let this_word = this.to_word();
-            let other_word = other.to_word();
+            let this_word = this.as_u64();
+            let other_word = other.as_u64();
             if this_word != other_word {
                 // Unfortunately, bases are packed in little endian order, so the default order is reversed.
                 let eq = this_word ^ other_word;
@@ -490,7 +488,7 @@ impl PartialEq for PackedSeq<'_> {
             let len = (self.len - i).min(29);
             let this = self.slice(i..i + len);
             let that = other.slice(i..i + len);
-            if this.to_word() != that.to_word() {
+            if this.as_u64() != that.as_u64() {
                 return false;
             }
         }
@@ -514,8 +512,8 @@ impl Ord for PackedSeq<'_> {
             let len = (min_len - i).min(29);
             let this = self.slice(i..i + len);
             let other = other.slice(i..i + len);
-            let this_word = this.to_word();
-            let other_word = other.to_word();
+            let this_word = this.as_u64();
+            let other_word = other.as_u64();
             if this_word != other_word {
                 // Unfortunately, bases are packed in little endian order, so the default order is reversed.
                 let eq = this_word ^ other_word;

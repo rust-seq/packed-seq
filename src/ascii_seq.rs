@@ -48,9 +48,9 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
     }
 
     #[inline(always)]
-    fn to_word(&self) -> usize {
+    fn as_u64(&self) -> u64 {
         let len = self.len();
-        assert!(len <= usize::BITS as usize / 2);
+        assert!(len <= u64::BITS as usize / 2);
 
         let mut val = 0u64;
 
@@ -79,12 +79,12 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
             }
         }
 
-        val as usize
+        val
     }
 
     #[inline(always)]
-    fn to_word_revcomp(&self) -> usize {
-        Self::revcomp_word(self.to_word(), self.len())
+    fn revcomp_as_u64(&self) -> u64 {
+        Self::revcomp_u64(self.as_u64(), self.len())
     }
 
     /// Convert to an owned version.

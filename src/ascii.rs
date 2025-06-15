@@ -30,14 +30,14 @@ impl Seq<'_> for &[u8] {
     }
 
     #[inline(always)]
-    fn to_word(&self) -> usize {
-        assert!(self.len() <= usize::BITS as usize / 8);
-        let mask = usize::MAX >> (64 - 8 * self.len());
-        unsafe { (self.as_ptr() as *const usize).read_unaligned() & mask }
+    fn as_u64(&self) -> u64 {
+        assert!(self.len() <= u64::BITS as usize / 8);
+        let mask = u64::MAX >> (64 - 8 * self.len());
+        unsafe { (self.as_ptr() as *const u64).read_unaligned() & mask }
     }
 
     #[inline(always)]
-    fn to_word_revcomp(&self) -> usize {
+    fn revcomp_as_u64(&self) -> u64 {
         unimplemented!("Reverse complement is only defined for DNA sequences, use `AsciiSeq` or `PackedSeq` instead.")
     }
 

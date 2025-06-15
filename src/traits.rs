@@ -38,15 +38,27 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     /// Get the ASCII character at the given index, _without_ mapping to `b`-bit values.
     fn get_ascii(&self, _index: usize) -> u8;
 
+    /// Convert a short sequence (kmer) to a packed representation as `u64`.
+    fn as_u64(&self) -> u64;
+
+    /// Convert a short sequence (kmer) to a packed representation of its reverse complement as `u64`.
+    fn revcomp_as_u64(&self) -> u64;
+
     /// Convert a short sequence (kmer) to a packed representation as `usize`.
-    fn to_word(&self) -> usize;
+    #[deprecated = "Prefer `to_u64`."]
+    fn to_word(&self) -> usize {
+        self.as_u64() as usize
+    }
 
     /// Convert a short sequence (kmer) to a packed representation of its reverse complement as `usize`.
-    fn to_word_revcomp(&self) -> usize;
+    #[deprecated = "Prefer `revcomp_to_u64`."]
+    fn to_word_revcomp(&self) -> usize {
+        self.revcomp_as_u64() as usize
+    }
 
     /// Compute the reverse complement of a short sequence packed in a `usize`.
     #[inline(always)]
-    fn revcomp_word(word: usize, len: usize) -> usize {
+    fn revcomp_u64(word: u64, len: usize) -> u64 {
         #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
         {
             let mut res = word.reverse_bits(); // ARM can reverse bits in a single instruction
