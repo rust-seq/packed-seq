@@ -527,8 +527,8 @@ fn rc_rc() {
     let seq = PackedSeqVec::random(n);
     for k in 1..=29 {
         for i in 0..=(n - k) {
-            let word = seq.slice(i..i + k).as_u64();
-            let rc = seq.slice(i..i + k).revcomp_as_u64();
+            let word = seq.read_kmer(k, i);
+            let rc = seq.read_revcomp_kmer(k, i);
             assert_eq!(PackedSeq::revcomp_u64(word, k), rc, "k={k} i={i}");
             assert_eq!(PackedSeq::revcomp_u64(rc, k), word, "k={k} i={i}");
         }
@@ -536,8 +536,8 @@ fn rc_rc() {
     let seq = AsciiSeqVec::random(n);
     for k in 1..=32 {
         for i in 0..=(n - k) {
-            let word = seq.slice(i..i + k).as_u64();
-            let rc = seq.slice(i..i + k).revcomp_as_u64();
+            let word = seq.read_kmer(k, i);
+            let rc = seq.read_revcomp_kmer(k, i);
             assert_eq!(AsciiSeq::revcomp_u64(word, k), rc, "k={k} i={i}");
             assert_eq!(AsciiSeq::revcomp_u64(rc, k), word, "k={k} i={i}");
         }

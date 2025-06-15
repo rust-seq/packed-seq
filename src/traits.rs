@@ -84,6 +84,16 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     /// `range` indicates character indices.
     fn slice(&self, range: Range<usize>) -> Self;
 
+    /// Extract a k-mer from this sequence.
+    fn read_kmer(&self, k: usize, pos: usize) -> u64 {
+        self.slice(pos..pos + k).as_u64()
+    }
+
+    /// Extract a reverse complement k-mer from this sequence.
+    fn read_revcomp_kmer(&self, k: usize, pos: usize) -> u64 {
+        self.slice(pos..pos + k).revcomp_as_u64()
+    }
+
     /// Iterate over the `b`-bit characters of the sequence.
     fn iter_bp(self) -> impl ExactSizeIterator<Item = u8> + Clone;
 
@@ -181,6 +191,16 @@ pub trait SeqVec:
     #[inline(always)]
     fn slice(&self, range: Range<usize>) -> Self::Seq<'_> {
         self.as_slice().slice(range)
+    }
+
+    /// Extract a k-mer from this sequence.
+    fn read_kmer(&self, k: usize, pos: usize) -> u64 {
+        self.as_slice().read_kmer(k, pos)
+    }
+
+    /// Extract a k-mer from this sequence.
+    fn read_revcomp_kmer(&self, k: usize, pos: usize) -> u64 {
+        self.as_slice().read_revcomp_kmer(k, pos)
     }
 
     /// The length of the sequence in characters.
