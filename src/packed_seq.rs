@@ -8,11 +8,11 @@ use super::*;
 #[derive(Copy, Clone, Debug, MemSize, MemDbg)]
 pub struct PackedSeq<'s> {
     /// Packed data.
-    pub seq: &'s [u8],
+    seq: &'s [u8],
     /// Offset in bp from the start of the `seq`.
-    pub offset: usize,
+    offset: usize,
     /// Length of the sequence in bp, starting at `offset` from the start of `seq`.
-    pub len: usize,
+    len: usize,
 }
 
 /// Number of padding bytes at the end of `PackedSeqVec::seq`.

@@ -4,7 +4,7 @@
 - Add `PackedSeqVec::clear()`.
 - `PackedSeq::as_u64` now supports k up to 32, instead of only up to 29. (Fixes #2.)
 - `PackedSeqVec::get` now uses checked indexing, to prevent unsafe out-of-bounds access.
-- **Breaking**: `PackedSeqVec::{seq, len}` are now private, to uphold internal
+- **Breaking**: `PackedSeqVec` and `PackedSeq` fields are now private, to uphold internal
   padding guarantees.
 - Add convenience methods `{Seq, SeqVec}::{read_kmer, read_revcomp_kmer}` as
   shorthands for `.slice(pos..pos+k).as_u64()`.
