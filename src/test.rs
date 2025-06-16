@@ -51,6 +51,29 @@ fn pack_via_ascii() {
 }
 
 #[test]
+#[ignore = "This is a benchmark, not a test"]
+fn pack_word_bench() {
+    let n = 10000000;
+    let x = vec![b'A'; n];
+    let packed = PackedSeqVec::from_ascii(&x);
+    for k in 1..=32 {
+        let start = std::time::Instant::now();
+        let mut sum = 0;
+        for i in 0..=(x.len() - k) {
+            let word = packed.read_kmer(k, i);
+            sum += word;
+        }
+        std::hint::black_box(sum);
+        let d = start.elapsed();
+        eprintln!(
+            "PackedSeqVec::read_kmer({k}) took {} ms or {} ns per k-mer",
+            d.as_millis(),
+            d.as_nanos() as f32 / (x.len() - k + 1) as f32
+        );
+    }
+}
+
+#[test]
 fn pack_word() {
     let packed = PackedSeqVec::from_ascii(b"ACGTACGTACGTACGTACGTACGTACGT");
     let slice = packed.slice(0..1);
