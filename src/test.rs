@@ -75,9 +75,15 @@ fn pack_word_bench() {
 
 #[test]
 fn pack_word() {
-    let packed = PackedSeqVec::from_ascii(b"ACGTACGTACGTACGTACGTACGTACGT");
+    let packed = PackedSeqVec::from_ascii(b"ACGTACGTACGTACGTACGTACGTACGTACGTACGT");
     let slice = packed.slice(0..1);
     assert_eq!(slice.as_u64(), 0b00000000);
+    let slice = packed.slice(1..2);
+    assert_eq!(slice.as_u64(), 0b00000001);
+    let slice = packed.slice(2..3);
+    assert_eq!(slice.as_u64(), 0b00000011);
+    let slice = packed.slice(3..4);
+    assert_eq!(slice.as_u64(), 0b00000010);
     let slice = packed.slice(0..2);
     assert_eq!(slice.as_u64(), 0b00000100);
     let slice = packed.slice(0..3);
@@ -92,6 +98,70 @@ fn pack_word() {
     assert_eq!(
         slice.as_u64(),
         0b10110100101101001011010010110100101101001011010010110100
+    );
+    assert_eq!(
+        packed.slice(0..29).as_u64(),
+        0b0010110100101101001011010010110100101101001011010010110100
+    );
+    assert_eq!(
+        packed.slice(1..30).as_u64(),
+        0b0100101101001011010010110100101101001011010010110100101101
+    );
+    assert_eq!(
+        packed.slice(2..31).as_u64(),
+        0b1101001011010010110100101101001011010010110100101101001011
+    );
+    assert_eq!(
+        packed.slice(3..32).as_u64(),
+        0b1011010010110100101101001011010010110100101101001011010010
+    );
+    assert_eq!(
+        packed.slice(0..30).as_u64(),
+        0b010010110100101101001011010010110100101101001011010010110100
+    );
+    assert_eq!(
+        packed.slice(1..31).as_u64(),
+        0b110100101101001011010010110100101101001011010010110100101101
+    );
+    assert_eq!(
+        packed.slice(2..32).as_u64(),
+        0b101101001011010010110100101101001011010010110100101101001011
+    );
+    assert_eq!(
+        packed.slice(3..33).as_u64(),
+        0b001011010010110100101101001011010010110100101101001011010010
+    );
+    assert_eq!(
+        packed.slice(0..31).as_u64(),
+        0b11010010110100101101001011010010110100101101001011010010110100
+    );
+    assert_eq!(
+        packed.slice(1..32).as_u64(),
+        0b10110100101101001011010010110100101101001011010010110100101101
+    );
+    assert_eq!(
+        packed.slice(2..33).as_u64(),
+        0b00101101001011010010110100101101001011010010110100101101001011
+    );
+    assert_eq!(
+        packed.slice(3..34).as_u64(),
+        0b01001011010010110100101101001011010010110100101101001011010010
+    );
+    assert_eq!(
+        packed.slice(0..32).as_u64(),
+        0b1011010010110100101101001011010010110100101101001011010010110100
+    );
+    assert_eq!(
+        packed.slice(1..33).as_u64(),
+        0b0010110100101101001011010010110100101101001011010010110100101101
+    );
+    assert_eq!(
+        packed.slice(2..34).as_u64(),
+        0b0100101101001011010010110100101101001011010010110100101101001011
+    );
+    assert_eq!(
+        packed.slice(3..35).as_u64(),
+        0b1101001011010010110100101101001011010010110100101101001011010010
     );
 }
 
@@ -564,5 +634,26 @@ fn rc_rc() {
             assert_eq!(AsciiSeq::revcomp_u64(word, k), rc, "k={k} i={i}");
             assert_eq!(AsciiSeq::revcomp_u64(rc, k), word, "k={k} i={i}");
         }
+    }
+}
+
+// NOTE: For me, this requires jemalloc to actually trigger a segfault.
+// System malloc seems to consistently include some padding bytes at the end, so
+// that unaligned reads are never actually out of bounds.
+#[test]
+#[ignore = "requires jemalloc, and flaky anyway"]
+fn as_u64_read_unaligned_does_not_segfault() {
+    // #[global_allocator]
+    // static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
+    let mut vs = vec![];
+    loop {
+        let len = rand::random_range(4..130 * 4);
+        let ascii_seq = vec![b'A'; len];
+        let seq = PackedSeqVec::from_ascii(&ascii_seq);
+        drop(ascii_seq);
+        let kmer = seq.read_kmer(4, len - 4);
+        std::hint::black_box(kmer);
+        vs.push(seq);
     }
 }

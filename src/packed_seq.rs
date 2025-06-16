@@ -146,25 +146,30 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
     }
 
     /// Convert a short sequence (kmer) to a packed representation as `usize`.
-    /// Panics if `self` is longer than 29 characters.
+    /// Panics if `self` is longer than 32 characters.
     #[inline(always)]
     fn as_u64(&self) -> u64 {
-        debug_assert!(self.len() <= u64::BITS as usize / 2 - 3);
+        assert!(self.len() <= 32);
+        debug_assert!(self.seq.len() <= 9);
+
         let mask = u64::MAX >> (64 - 2 * self.len());
-        unsafe { ((self.seq.as_ptr() as *const u64).read_unaligned() >> (2 * self.offset)) & mask }
+
+        // The unaligned read is OK, because we ensure that the underlying `PackedSeqVec::seq` always
+        // has at least 16 bytes (the size of a u128) of padding at the end.
+        if self.len() <= 29 {
+            let x = unsafe { (self.seq.as_ptr() as *const u64).read_unaligned() };
+            (x >> (2 * self.offset)) & mask
+        } else {
+            let x = unsafe { (self.seq.as_ptr() as *const u128).read_unaligned() };
+            (x >> (2 * self.offset)) as u64 & mask
+        }
     }
 
     /// Convert a short sequence (kmer) to a packed representation of its reverse complement as `usize`.
-    /// Panics if `self` is longer than 29 characters.
+    /// Panics if `self` is longer than 32 characters.
     #[inline(always)]
     fn revcomp_as_u64(&self) -> u64 {
-        debug_assert!(self.len() <= u64::BITS as usize / 2 - 3);
-        unsafe {
-            Self::revcomp_u64(
-                (self.seq.as_ptr() as *const u64).read_unaligned() >> (2 * self.offset),
-                self.len(),
-            )
-        }
+        Self::revcomp_u64(self.as_u64(), self.len())
     }
 
     fn to_vec(&self) -> PackedSeqVec {
