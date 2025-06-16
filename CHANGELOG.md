@@ -1,6 +1,15 @@
 # Changelog
 
-## Git
+## Git (3.0)
+- `PackedSeq::as_u64` now supports k up to 32, instead of only up to 29. (Fixes #2.)
+- `PackedSeqVec::get` now uses checked indexing, to prevent unsafe out-of-bounds access.
+- **Breaking**: `PackedSeqVec::{seq, len}` are now private, to uphold internal
+  padding guarantees.
+- Add convenience methods `{Seq, SeqVec}::{read_kmer, read_revcomp_kmer}` as
+  shorthands for `.slice(pos..pos+k).as_u64()`.
+- Deprecate `to_word` and `to_word_revcomp`. Instead `as_u64` and
+  `revcomp_as_u64` are added. ('word' is not very clear, and `u64` makes more
+  sense for kmers than `usize`.)
 - Support `par_iter_bp` for sequences that do not start at byte offsets.
 - Add `Seq::revcomp_word()` and `Seq::to_word_revcomp()` for reverse
   complementing kmers.
