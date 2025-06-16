@@ -542,6 +542,15 @@ impl SeqVec for PackedSeqVec {
         }
     }
 
+    /// Create a `SeqVec` from ASCII input.
+    /// Custom implementation that resizes up-front.
+    fn from_ascii(seq: &[u8]) -> Self {
+        let mut packed_vec = Self::default();
+        packed_vec.seq.reserve(seq.len().div_ceil(4));
+        packed_vec.push_ascii(seq);
+        packed_vec
+    }
+
     fn push_seq<'a>(&mut self, seq: PackedSeq<'_>) -> Range<usize> {
         let start = 4 * self.seq.len() + seq.offset;
         let end = start + seq.len();
