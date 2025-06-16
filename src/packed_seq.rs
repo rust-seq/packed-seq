@@ -20,8 +20,22 @@ pub struct PackedSeq<'s> {
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[cfg_attr(feature = "epserde", derive(epserde::Epserde))]
 pub struct PackedSeqVec {
-    pub seq: Vec<u8>,
-    pub len: usize,
+    /// Use `.seq()` to access a read-only version.
+    seq: Vec<u8>,
+
+    /// The length, in bp, of the underlying sequence. See `.len()`.
+    len: usize,
+}
+
+impl PackedSeqVec {
+    /// Read the underlying sequence.
+    pub fn seq(&self) -> &[u8] {
+        &self.seq[..self.len.div_ceil(4)]
+    }
+
+    pub fn len(&self) -> usize {
+        self.len
+    }
 }
 
 /// Pack an ASCII `ACTGactg` character into its 2-bit representation.

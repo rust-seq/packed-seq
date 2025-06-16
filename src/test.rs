@@ -30,8 +30,8 @@ fn pack() {
             .collect();
         let (packed_1, len1) = pack_naive(&seq);
         let packed_2 = PackedSeqVec::from_ascii(&seq);
-        assert_eq!(len1, packed_2.len);
-        assert_eq!(packed_1, packed_2.seq);
+        assert_eq!(len1, packed_2.len());
+        assert_eq!(packed_1, packed_2.seq());
     }
 }
 
@@ -45,8 +45,8 @@ fn pack_via_ascii() {
         let ascii_seq = AsciiSeqVec::from_ascii(&seq);
         let (packed_1, len1) = pack_naive(&seq);
         let packed_2 = PackedSeqVec::from_ascii(&ascii_seq.seq);
-        assert_eq!(len1, packed_2.len);
-        assert_eq!(packed_1, packed_2.seq);
+        assert_eq!(len1, packed_2.len());
+        assert_eq!(packed_1, packed_2.seq());
     }
 }
 
@@ -144,7 +144,7 @@ fn push_ascii_unaligned() {
     assert_eq!(range, (3..9));
     let range = packed.push_ascii(&seq[9..]);
     assert_eq!(range, (9..12));
-    assert_eq!(packed.len, seq.len());
+    assert_eq!(packed.len(), seq.len());
     let slice = packed.as_slice();
     for (i, &c) in seq.iter().enumerate() {
         assert_eq!(slice.get_ascii(i), c);
@@ -160,9 +160,9 @@ fn push_ascii_random() {
         let seq = AsciiSeqVec::random(110).into_raw();
         let mut packed = PackedSeqVec::default();
         let mut rng = rand::rng();
-        while packed.len < 100 {
+        while packed.len() < 100 {
             let push_len = rng.random_range(1..=8);
-            let range = packed.len..(packed.len + push_len);
+            let range = packed.len()..(packed.len() + push_len);
             let range2 = packed.push_ascii(&seq[range.clone()]);
             assert_eq!(range, range2);
         }
@@ -170,7 +170,7 @@ fn push_ascii_random() {
         for (i, &c) in seq.iter().take(100).enumerate() {
             assert_eq!(slice.get_ascii(i), c);
         }
-        let packed2 = PackedSeqVec::from_ascii(&seq[..packed.len]);
+        let packed2 = PackedSeqVec::from_ascii(&seq[..packed.len()]);
         let expected = packed2.as_slice();
         assert!(slice.eq(&expected));
     }
