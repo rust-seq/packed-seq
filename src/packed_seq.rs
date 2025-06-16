@@ -130,7 +130,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let offset = self.offset + index;
         let idx = offset / 4;
         let offset = offset % 4;
-        unsafe { (*self.seq.get_unchecked(idx) >> (2 * offset)) & 3 }
+        (self.seq[idx] >> (2 * offset)) & 3
     }
 
     #[inline(always)]
