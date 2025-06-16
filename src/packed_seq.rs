@@ -15,11 +15,18 @@ pub struct PackedSeq<'s> {
     pub len: usize,
 }
 
+/// Number of padding bytes at the end of `PackedSeqVec::seq`.
+const PADDING: usize = 16;
+
 /// A 2-bit packed owned sequence of DNA bases.
 #[derive(Clone, Debug, Default, MemSize, MemDbg)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[cfg_attr(feature = "epserde", derive(epserde::Epserde))]
 pub struct PackedSeqVec {
+    /// NOTE: We maintain the invariant that this has at least 16 bytes padding
+    /// at the end after `len` finishes.
+    /// This ensures that `read_unaligned` in `as_64` works OK.
+    ///
     /// Use `.seq()` to access a read-only version.
     seq: Vec<u8>,
 
@@ -163,7 +170,12 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
     fn to_vec(&self) -> PackedSeqVec {
         assert_eq!(self.offset, 0);
         PackedSeqVec {
-            seq: self.seq.to_vec(),
+            seq: self
+                .seq
+                .iter()
+                .copied()
+                .chain(std::iter::repeat(0u8).take(PADDING))
+                .collect(),
             len: self.len,
         }
     }
@@ -543,14 +555,15 @@ impl Ord for PackedSeq<'_> {
 impl SeqVec for PackedSeqVec {
     type Seq<'s> = PackedSeq<'s>;
 
-    fn into_raw(self) -> Vec<u8> {
+    fn into_raw(mut self) -> Vec<u8> {
+        self.seq.resize(self.len.div_ceil(4), 0);
         self.seq
     }
 
     #[inline(always)]
     fn as_slice(&self) -> Self::Seq<'_> {
         PackedSeq {
-            seq: &self.seq,
+            seq: &self.seq[..self.len.div_ceil(4)],
             offset: 0,
             len: self.len,
         }
@@ -560,16 +573,20 @@ impl SeqVec for PackedSeqVec {
     /// Custom implementation that resizes up-front.
     fn from_ascii(seq: &[u8]) -> Self {
         let mut packed_vec = Self::default();
-        packed_vec.seq.reserve(seq.len().div_ceil(4));
         packed_vec.push_ascii(seq);
         packed_vec
     }
 
     fn push_seq<'a>(&mut self, seq: PackedSeq<'_>) -> Range<usize> {
-        let start = 4 * self.seq.len() + seq.offset;
+        let start = self.len.next_multiple_of(4) + seq.offset;
         let end = start + seq.len();
+        // Drop padding bytes at the end.
+        self.seq.resize(self.len.next_multiple_of(4), 0);
+        // Extend with new sequence and padding.
+        self.seq.reserve(self.seq.len() + seq.seq.len() + PADDING);
         self.seq.extend(seq.seq);
-        self.len = 4 * self.seq.len();
+        self.seq.extend(std::iter::repeat(0u8).take(PADDING));
+        self.len = end;
         start..end
     }
 
@@ -585,18 +602,22 @@ impl SeqVec for PackedSeqVec {
     /// TODO: Optimize for non-BMI2 platforms.
     /// TODO: Support multiple ways of dealing with non-`ACTG` characters.
     fn push_ascii(&mut self, seq: &[u8]) -> Range<usize> {
-        let start_aligned = 4 * self.seq.len();
+        self.seq
+            .resize((self.len + seq.len()).div_ceil(4) + PADDING, 0);
+        let start_aligned = self.len.next_multiple_of(4);
         let start = self.len;
         let len = seq.len();
+        let mut idx = self.len / 4;
 
         let unaligned = core::cmp::min(start_aligned - start, len);
         if unaligned > 0 {
-            let mut packed_byte = *self.seq.last().unwrap();
+            let mut packed_byte = self.seq[idx];
             for &base in &seq[..unaligned] {
                 packed_byte |= pack_char(base) << ((self.len % 4) * 2);
                 self.len += 1;
             }
-            *self.seq.last_mut().unwrap() = packed_byte;
+            self.seq[idx] = packed_byte;
+            idx += 1;
         }
 
         #[allow(unused)]
@@ -611,8 +632,10 @@ impl SeqVec for PackedSeqVec {
                 let ascii = u64::from_ne_bytes(*chunk);
                 let packed_bytes =
                     unsafe { std::arch::x86_64::_pext_u64(ascii, 0x0606060606060606) };
-                self.seq.push(packed_bytes as u8);
-                self.seq.push((packed_bytes >> 8) as u8);
+                self.seq[idx] = packed_bytes as u8;
+                idx += 1;
+                self.seq[idx] = (packed_bytes >> 8) as u8;
+                idx += 1;
                 self.len += 8;
             }
         }
@@ -622,13 +645,16 @@ impl SeqVec for PackedSeqVec {
             packed_byte |= pack_char(base) << ((self.len % 4) * 2);
             self.len += 1;
             if self.len % 4 == 0 {
-                self.seq.push(packed_byte);
+                self.seq[idx] = packed_byte;
+                idx += 1;
                 packed_byte = 0;
             }
         }
         if self.len % 4 != 0 && last < len {
-            self.seq.push(packed_byte);
+            self.seq[idx] = packed_byte;
+            idx += 1;
         }
+        assert_eq!(idx + PADDING, self.seq.len());
         start..start + len
     }
 
@@ -636,7 +662,7 @@ impl SeqVec for PackedSeqVec {
     fn random(n: usize) -> Self {
         use rand::{RngCore, SeedableRng};
 
-        let mut seq = vec![0; n.div_ceil(4)];
+        let mut seq = vec![0; n.div_ceil(4) + PADDING];
         rand::rngs::SmallRng::from_os_rng().fill_bytes(&mut seq);
         Self { seq, len: n }
     }
