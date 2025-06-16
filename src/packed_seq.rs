@@ -35,13 +35,20 @@ pub struct PackedSeqVec {
 }
 
 impl PackedSeqVec {
-    /// Read the underlying sequence.
+    /// The raw underlying sequence.
     pub fn seq(&self) -> &[u8] {
         &self.seq[..self.len.div_ceil(4)]
     }
 
+    /// The length of the sequence in bp.
     pub fn len(&self) -> usize {
         self.len
+    }
+
+    /// Empty the sequence.
+    pub fn clear(&mut self) {
+        self.seq.clear();
+        self.len = 0;
     }
 }
 
