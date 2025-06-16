@@ -93,6 +93,27 @@ pub fn complement_base_simd(base: u32x8) -> u32x8 {
     base ^ u32x8::splat(2)
 }
 
+/// Compute the reverse complement of a short sequence packed in a `u64`.
+#[inline(always)]
+pub fn revcomp_u64(word: u64, len: usize) -> u64 {
+    #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+    {
+        let mut res = word.reverse_bits(); // ARM can reverse bits in a single instruction
+        res = ((res >> 1) & 0x5555_5555_5555_5555) | ((res & 0x5555_5555_5555_5555) << 1);
+        res ^= 0xAAAA_AAAA_AAAA_AAAA;
+        res >> (usize::BITS as usize - 2 * len)
+    }
+
+    #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
+    {
+        let mut res = word.swap_bytes();
+        res = ((res >> 4) & 0x0F0F_0F0F_0F0F_0F0F) | ((res & 0x0F0F_0F0F_0F0F_0F0F) << 4);
+        res = ((res >> 2) & 0x3333_3333_3333_3333) | ((res & 0x3333_3333_3333_3333) << 2);
+        res ^= 0xAAAA_AAAA_AAAA_AAAA;
+        res >> (usize::BITS as usize - 2 * len)
+    }
+}
+
 impl PackedSeq<'_> {
     /// Shrink `seq` to only just cover the data.
     #[inline(always)]
@@ -176,7 +197,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
     /// Panics if `self` is longer than 32 characters.
     #[inline(always)]
     fn revcomp_as_u64(&self) -> u64 {
-        Self::revcomp_u64(self.as_u64(), self.len())
+        revcomp_u64(self.as_u64(), self.len())
     }
 
     fn to_vec(&self) -> PackedSeqVec {

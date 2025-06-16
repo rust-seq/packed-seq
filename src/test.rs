@@ -622,8 +622,8 @@ fn rc_rc() {
         for i in 0..=(n - k) {
             let word = seq.read_kmer(k, i);
             let rc = seq.read_revcomp_kmer(k, i);
-            assert_eq!(PackedSeq::revcomp_u64(word, k), rc, "k={k} i={i}");
-            assert_eq!(PackedSeq::revcomp_u64(rc, k), word, "k={k} i={i}");
+            assert_eq!(packed_seq::revcomp_u64(word, k), rc, "k={k} i={i}");
+            assert_eq!(packed_seq::revcomp_u64(rc, k), word, "k={k} i={i}");
         }
     }
     let seq = AsciiSeqVec::random(n);
@@ -631,8 +631,8 @@ fn rc_rc() {
         for i in 0..=(n - k) {
             let word = seq.read_kmer(k, i);
             let rc = seq.read_revcomp_kmer(k, i);
-            assert_eq!(AsciiSeq::revcomp_u64(word, k), rc, "k={k} i={i}");
-            assert_eq!(AsciiSeq::revcomp_u64(rc, k), word, "k={k} i={i}");
+            assert_eq!(packed_seq::revcomp_u64(word, k), rc, "k={k} i={i}");
+            assert_eq!(packed_seq::revcomp_u64(rc, k), word, "k={k} i={i}");
         }
     }
 }

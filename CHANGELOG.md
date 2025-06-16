@@ -12,7 +12,7 @@
   `revcomp_as_u64` are added. ('word' is not very clear, and `u64` makes more
   sense for kmers than `usize`.)
 - Support `par_iter_bp` for sequences that do not start at byte offsets.
-- Add `Seq::revcomp_word()` and `Seq::to_word_revcomp()` for reverse
+- Add `packed_seq::revcomp_u64()` and `Seq::revcomp_as_u64()` for reverse
   complementing kmers.
 - Make `random` dependency optional but enabled by default (so it can be
   disabled for wasm backends).

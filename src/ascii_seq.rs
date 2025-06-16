@@ -84,7 +84,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
 
     #[inline(always)]
     fn revcomp_as_u64(&self) -> u64 {
-        Self::revcomp_u64(self.as_u64(), self.len())
+        packed_seq::revcomp_u64(self.as_u64(), self.len())
     }
 
     /// Convert to an owned version.
