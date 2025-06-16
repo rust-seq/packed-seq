@@ -615,7 +615,7 @@ fn slice_get() {
 }
 
 #[test]
-fn rc_rc() {
+fn rc_rc_u64() {
     let n = 10000;
     let seq = PackedSeqVec::random(n);
     for k in 1..=29 {
@@ -633,6 +633,25 @@ fn rc_rc() {
             let rc = seq.read_revcomp_kmer(k, i);
             assert_eq!(packed_seq::revcomp_u64(word, k), rc, "k={k} i={i}");
             assert_eq!(packed_seq::revcomp_u64(rc, k), word, "k={k} i={i}");
+        }
+    }
+}
+
+#[test]
+fn rc_rc_seq() {
+    for n in (0..100).chain(100000..100000 + 10) {
+        {
+            let seq = AsciiSeqVec::random(n);
+            let rc = seq.as_slice().to_revcomp();
+            let rc_rc = rc.as_slice().to_revcomp();
+            assert_eq!(seq.seq, rc_rc.seq);
+        }
+
+        {
+            let seq = PackedSeqVec::random(n);
+            let rc = seq.as_slice().to_revcomp();
+            let rc_rc = rc.as_slice().to_revcomp();
+            assert_eq!(seq.seq(), rc_rc.seq());
         }
     }
 }

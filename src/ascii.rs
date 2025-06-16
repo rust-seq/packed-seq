@@ -46,6 +46,10 @@ impl Seq<'_> for &[u8] {
         <[u8]>::to_vec(self)
     }
 
+    fn to_revcomp(&self) -> Vec<u8> {
+        unimplemented!("Reverse complement is only defined for DNA sequences, use `AsciiSeq` or `PackedSeq` instead.")
+    }
+
     #[inline(always)]
     fn slice(&self, range: Range<usize>) -> Self {
         &self[range]

@@ -59,6 +59,9 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     /// Convert to an owned version.
     fn to_vec(&self) -> Self::SeqVec;
 
+    /// Compute the reverse complement of this sequence.
+    fn to_revcomp(&self) -> Self::SeqVec;
+
     /// Get a sub-slice of the sequence.
     /// `range` indicates character indices.
     fn slice(&self, range: Range<usize>) -> Self;

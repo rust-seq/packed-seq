@@ -94,6 +94,18 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         }
     }
 
+    fn to_revcomp(&self) -> AsciiSeqVec {
+        AsciiSeqVec {
+            seq: self
+                .0
+                .iter()
+                .rev()
+                .copied()
+                .map(packed_seq::complement_char)
+                .collect(),
+        }
+    }
+
     #[inline(always)]
     fn slice(&self, range: Range<usize>) -> Self {
         Self(&self.0[range])

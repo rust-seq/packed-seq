@@ -213,6 +213,38 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         }
     }
 
+    fn to_revcomp(&self) -> PackedSeqVec {
+        let mut seq = self.seq[..(self.offset + self.len).div_ceil(4)]
+            .iter()
+            // 1. reverse the bytes
+            .rev()
+            .copied()
+            .map(|mut res| {
+                // 2. swap the bases in the byte
+                // This is auto-vectorized.
+                res = ((res >> 4) & 0x0F) | ((res & 0x0F) << 4);
+                res = ((res >> 2) & 0x33) | ((res & 0x33) << 2);
+                res ^ 0xAA
+            })
+            .chain(std::iter::repeat(0u8).take(PADDING))
+            .collect::<Vec<u8>>();
+
+        // 3. Shift away the offset.
+        let new_offset = (4 - (self.offset + self.len) % 4) % 4;
+
+        if new_offset > 0 {
+            // Shift everything left by `2*new_offset` bits.
+            let shift = 2 * new_offset;
+            *seq.last_mut().unwrap() >>= shift;
+            // This loop is also auto-vectorized.
+            for i in 0..seq.len() - 1 {
+                seq[i] = (seq[i] >> shift) | (seq[i + 1] << (8 - shift));
+            }
+        }
+
+        PackedSeqVec { seq, len: self.len }
+    }
+
     #[inline(always)]
     fn slice(&self, range: Range<usize>) -> Self {
         debug_assert!(
@@ -695,8 +727,14 @@ impl SeqVec for PackedSeqVec {
     fn random(n: usize) -> Self {
         use rand::{RngCore, SeedableRng};
 
-        let mut seq = vec![0; n.div_ceil(4) + PADDING];
-        rand::rngs::SmallRng::from_os_rng().fill_bytes(&mut seq);
+        let byte_len = n.div_ceil(4);
+        let mut seq = vec![0; byte_len + PADDING];
+        rand::rngs::SmallRng::from_os_rng().fill_bytes(&mut seq[..byte_len]);
+        // Ensure that the last byte is padded with zeros.
+        if n % 4 != 0 {
+            seq[byte_len - 1] &= (1 << (2 * (n % 4))) - 1;
+        }
+
         Self { seq, len: n }
     }
 }
