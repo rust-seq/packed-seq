@@ -42,10 +42,12 @@ impl Seq<'_> for &[u8] {
     }
 
     /// Convert to an owned version.
+    #[inline(always)]
     fn to_vec(&self) -> Vec<u8> {
         <[u8]>::to_vec(self)
     }
 
+    #[inline(always)]
     fn to_revcomp(&self) -> Vec<u8> {
         unimplemented!("Reverse complement is only defined for DNA sequences, use `AsciiSeq` or `PackedSeq` instead.")
     }
@@ -295,6 +297,7 @@ impl SeqVec for Vec<u8> {
         self.clear()
     }
 
+    #[inline(always)]
     fn push_seq(&mut self, seq: &[u8]) -> Range<usize> {
         let start = self.len();
         let end = start + seq.len();

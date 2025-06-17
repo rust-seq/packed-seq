@@ -46,12 +46,14 @@ pub trait Seq<'s>: Copy + Eq + Ord {
 
     /// Convert a short sequence (kmer) to a packed representation as `usize`.
     #[deprecated = "Prefer `to_u64`."]
+    #[inline(always)]
     fn to_word(&self) -> usize {
         self.as_u64() as usize
     }
 
     /// Convert a short sequence (kmer) to a packed representation of its reverse complement as `usize`.
     #[deprecated = "Prefer `revcomp_to_u64`."]
+    #[inline(always)]
     fn to_word_revcomp(&self) -> usize {
         self.revcomp_as_u64() as usize
     }
@@ -67,11 +69,13 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     fn slice(&self, range: Range<usize>) -> Self;
 
     /// Extract a k-mer from this sequence.
+    #[inline(always)]
     fn read_kmer(&self, k: usize, pos: usize) -> u64 {
         self.slice(pos..pos + k).as_u64()
     }
 
     /// Extract a reverse complement k-mer from this sequence.
+    #[inline(always)]
     fn read_revcomp_kmer(&self, k: usize, pos: usize) -> u64 {
         self.slice(pos..pos + k).revcomp_as_u64()
     }

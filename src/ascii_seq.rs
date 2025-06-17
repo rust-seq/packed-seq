@@ -88,12 +88,14 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
     }
 
     /// Convert to an owned version.
+    #[inline(always)]
     fn to_vec(&self) -> AsciiSeqVec {
         AsciiSeqVec {
             seq: self.0.to_vec(),
         }
     }
 
+    #[inline(always)]
     fn to_revcomp(&self) -> AsciiSeqVec {
         AsciiSeqVec {
             seq: self
@@ -362,6 +364,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
 }
 
 impl AsciiSeqVec {
+    #[inline(always)]
     pub const fn from_vec(seq: Vec<u8>) -> Self {
         Self { seq }
     }
@@ -396,6 +399,7 @@ impl SeqVec for AsciiSeqVec {
         self.seq.clear()
     }
 
+    #[inline(always)]
     fn push_seq(&mut self, seq: AsciiSeq) -> Range<usize> {
         let start = self.seq.len();
         let end = start + seq.len();

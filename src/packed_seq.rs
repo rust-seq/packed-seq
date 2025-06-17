@@ -33,6 +33,7 @@ pub struct PackedSeqVec {
 }
 
 /// Pack an ASCII `ACTGactg` character into its 2-bit representation.
+#[inline(always)]
 pub fn pack_char(base: u8) -> u8 {
     match base {
         b'a' | b'A' => 0,
@@ -47,12 +48,14 @@ pub fn pack_char(base: u8) -> u8 {
 }
 
 /// Unpack a 2-bit DNA base into the corresponding `ACTG` character.
+#[inline(always)]
 pub fn unpack_base(base: u8) -> u8 {
     debug_assert!(base < 4, "Base {base} is not <4.");
     b"ACTG"[base as usize]
 }
 
 /// Complement an ASCII character: `A<>T` and `C<>G`.
+#[inline(always)]
 pub const fn complement_char(base: u8) -> u8 {
     match base {
         b'A' => b'T',
@@ -64,11 +67,13 @@ pub const fn complement_char(base: u8) -> u8 {
 }
 
 /// Complement a 2-bit base: `0<>2` and `1<>3`.
+#[inline(always)]
 pub const fn complement_base(base: u8) -> u8 {
     base ^ 2
 }
 
 /// Complement 8 lanes of 2-bit bases: `0<>2` and `1<>3`.
+#[inline(always)]
 pub fn complement_base_simd(base: u32x8) -> u32x8 {
     base ^ u32x8::splat(2)
 }
@@ -108,6 +113,7 @@ impl PackedSeq<'_> {
     }
 
     /// Return a `Vec<u8>` of ASCII `ACTG` characters.
+    #[inline(always)]
     pub fn unpack(&self) -> Vec<u8> {
         self.iter_bp().map(unpack_base).collect()
     }
@@ -180,6 +186,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         revcomp_u64(self.as_u64(), self.len())
     }
 
+    #[inline(always)]
     fn to_vec(&self) -> PackedSeqVec {
         assert_eq!(self.offset, 0);
         PackedSeqVec {
