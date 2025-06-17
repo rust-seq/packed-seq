@@ -41,8 +41,13 @@ impl PackedSeqVec {
     }
 
     /// The length of the sequence in bp.
-    pub fn len(&self) -> usize {
+    pub const fn len(&self) -> usize {
         self.len
+    }
+
+    /// Returns `true` if the sequence is empty.
+    pub const fn is_empty(&self) -> bool {
+        self.len == 0
     }
 
     /// Empty the sequence.
@@ -95,7 +100,7 @@ pub fn complement_base_simd(base: u32x8) -> u32x8 {
 
 /// Compute the reverse complement of a short sequence packed in a `u64`.
 #[inline(always)]
-pub fn revcomp_u64(word: u64, len: usize) -> u64 {
+pub const fn revcomp_u64(word: u64, len: usize) -> u64 {
     #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
     {
         let mut res = word.reverse_bits(); // ARM can reverse bits in a single instruction
@@ -207,7 +212,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                 .seq
                 .iter()
                 .copied()
-                .chain(std::iter::repeat(0u8).take(PADDING))
+                .chain(std::iter::repeat_n(0u8, PADDING))
                 .collect(),
             len: self.len,
         }
@@ -226,7 +231,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                 res = ((res >> 2) & 0x33) | ((res & 0x33) << 2);
                 res ^ 0xAA
             })
-            .chain(std::iter::repeat(0u8).take(PADDING))
+            .chain(std::iter::repeat_n(0u8, PADDING))
             .collect::<Vec<u8>>();
 
         // 3. Shift away the offset.
@@ -650,7 +655,7 @@ impl SeqVec for PackedSeqVec {
         // Extend with new sequence and padding.
         self.seq.reserve(self.seq.len() + seq.seq.len() + PADDING);
         self.seq.extend(seq.seq);
-        self.seq.extend(std::iter::repeat(0u8).take(PADDING));
+        self.seq.extend(std::iter::repeat_n(0u8, PADDING));
         self.len = end;
         start..end
     }
