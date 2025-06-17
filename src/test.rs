@@ -31,7 +31,7 @@ fn pack() {
         let (packed_1, len1) = pack_naive(&seq);
         let packed_2 = PackedSeqVec::from_ascii(&seq);
         assert_eq!(len1, packed_2.len());
-        assert_eq!(packed_1, packed_2.seq);
+        assert_eq!(packed_1, packed_2.seq[..packed_2.len().div_ceil(4)]);
     }
 }
 
@@ -46,7 +46,7 @@ fn pack_via_ascii() {
         let (packed_1, len1) = pack_naive(&seq);
         let packed_2 = PackedSeqVec::from_ascii(&ascii_seq.seq);
         assert_eq!(len1, packed_2.len());
-        assert_eq!(packed_1, packed_2.seq);
+        assert_eq!(packed_1, packed_2.seq[..packed_2.len().div_ceil(4)]);
     }
 }
 
