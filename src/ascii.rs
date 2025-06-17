@@ -270,6 +270,7 @@ impl SeqVec for Vec<u8> {
     type Seq<'s> = &'s [u8];
 
     /// Get the underlying ASCII text.
+    #[inline(always)]
     fn into_raw(self) -> Vec<u8> {
         self
     }
@@ -277,6 +278,21 @@ impl SeqVec for Vec<u8> {
     #[inline(always)]
     fn as_slice(&self) -> Self::Seq<'_> {
         self.as_slice()
+    }
+
+    #[inline(always)]
+    fn len(&self) -> usize {
+        self.len()
+    }
+
+    #[inline(always)]
+    fn is_empty(&self) -> bool {
+        self.is_empty()
+    }
+
+    #[inline(always)]
+    fn clear(&mut self) {
+        self.clear()
     }
 
     fn push_seq(&mut self, seq: &[u8]) -> Range<usize> {
@@ -287,6 +303,7 @@ impl SeqVec for Vec<u8> {
         range
     }
 
+    #[inline(always)]
     fn push_ascii(&mut self, seq: &[u8]) -> Range<usize> {
         self.push_seq(seq)
     }

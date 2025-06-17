@@ -176,24 +176,25 @@ pub trait SeqVec:
     }
 
     /// Extract a k-mer from this sequence.
+    #[inline(always)]
     fn read_kmer(&self, k: usize, pos: usize) -> u64 {
         self.as_slice().read_kmer(k, pos)
     }
 
     /// Extract a k-mer from this sequence.
+    #[inline(always)]
     fn read_revcomp_kmer(&self, k: usize, pos: usize) -> u64 {
         self.as_slice().read_revcomp_kmer(k, pos)
     }
 
     /// The length of the sequence in characters.
-    fn len(&self) -> usize {
-        self.as_slice().len()
-    }
+    fn len(&self) -> usize;
 
     /// Returns `true` if the sequence is empty.
-    fn is_empty(&self) -> bool {
-        self.as_slice().is_empty()
-    }
+    fn is_empty(&self) -> bool;
+
+    /// Empty the sequence.
+    fn clear(&mut self);
 
     /// Convert into the underlying raw representation.
     fn into_raw(self) -> Vec<u8>;
@@ -203,6 +204,7 @@ pub trait SeqVec:
     fn random(n: usize) -> Self;
 
     /// Create a `SeqVec` from ASCII input.
+    #[inline(always)]
     fn from_ascii(seq: &[u8]) -> Self {
         let mut packed_vec = Self::default();
         packed_vec.push_ascii(seq);

@@ -26,35 +26,10 @@ pub struct PackedSeqVec {
     /// NOTE: We maintain the invariant that this has at least 16 bytes padding
     /// at the end after `len` finishes.
     /// This ensures that `read_unaligned` in `as_64` works OK.
-    ///
-    /// Use `.seq()` to access a read-only version.
-    seq: Vec<u8>,
+    pub(crate) seq: Vec<u8>,
 
     /// The length, in bp, of the underlying sequence. See `.len()`.
     len: usize,
-}
-
-impl PackedSeqVec {
-    /// The raw underlying sequence.
-    pub fn seq(&self) -> &[u8] {
-        &self.seq[..self.len.div_ceil(4)]
-    }
-
-    /// The length of the sequence in bp.
-    pub const fn len(&self) -> usize {
-        self.len
-    }
-
-    /// Returns `true` if the sequence is empty.
-    pub const fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-
-    /// Empty the sequence.
-    pub fn clear(&mut self) {
-        self.seq.clear();
-        self.len = 0;
-    }
 }
 
 /// Pack an ASCII `ACTGactg` character into its 2-bit representation.
@@ -625,6 +600,7 @@ impl Ord for PackedSeq<'_> {
 impl SeqVec for PackedSeqVec {
     type Seq<'s> = PackedSeq<'s>;
 
+    #[inline(always)]
     fn into_raw(mut self) -> Vec<u8> {
         self.seq.resize(self.len.div_ceil(4), 0);
         self.seq
@@ -639,12 +615,20 @@ impl SeqVec for PackedSeqVec {
         }
     }
 
-    /// Create a `SeqVec` from ASCII input.
-    /// Custom implementation that resizes up-front.
-    fn from_ascii(seq: &[u8]) -> Self {
-        let mut packed_vec = Self::default();
-        packed_vec.push_ascii(seq);
-        packed_vec
+    #[inline(always)]
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    #[inline(always)]
+    fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    #[inline(always)]
+    fn clear(&mut self) {
+        self.seq.clear();
+        self.len = 0;
     }
 
     fn push_seq<'a>(&mut self, seq: PackedSeq<'_>) -> Range<usize> {
