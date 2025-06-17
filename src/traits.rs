@@ -138,7 +138,7 @@ pub trait Seq<'s>: Copy + Eq + Ord {
 // Some hacky stuff to make conditional supertraits.
 cfg_if::cfg_if! {
     if #[cfg(feature = "epserde")] {
-        pub use serde::{DeserializeInner, SerializeInner};
+        pub use epserde::{deser::DeserializeInner, ser::SerializeInner};
     } else {
         pub trait SerializeInner {}
         pub trait DeserializeInner {}
