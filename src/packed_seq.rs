@@ -660,7 +660,6 @@ impl SeqVec for PackedSeqVec {
     /// `n_to_bits_pext` method described at
     /// <https://github.com/Daniel-Liu-c0deb0t/cute-nucleotides>.
     ///
-    /// TODO: Optimize for non-BMI2 platforms.
     /// TODO: Support multiple ways of dealing with non-`ACTG` characters.
     fn push_ascii(&mut self, seq: &[u8]) -> Range<usize> {
         self.seq
@@ -698,6 +697,30 @@ impl SeqVec for PackedSeqVec {
                 self.seq[idx] = (packed_bytes >> 8) as u8;
                 idx += 1;
                 self.len += 8;
+            }
+        }
+
+        #[cfg(target_feature = "neon")]
+        {
+            use core::arch::aarch64::{vandq_u8, vdup_n_u8, vld1q_u8, vpadd_u8, vshlq_u8, vst1_u8};
+            use core::mem::transmute;
+
+            last = unaligned + (len - unaligned) / 16 * 16;
+
+            for i in (unaligned..last).step_by(16) {
+                unsafe {
+                    let ascii = vld1q_u8(seq.as_ptr().add(i));
+                    let masked_bits = vandq_u8(ascii, transmute([6i8; 16]));
+                    let (bits_0, bits_1) = transmute(vshlq_u8(
+                        masked_bits,
+                        transmute([-1i8, 1, 3, 5, -1, 1, 3, 5, -1, 1, 3, 5, -1, 1, 3, 5]),
+                    ));
+                    let half_packed = vpadd_u8(bits_0, bits_1);
+                    let packed = vpadd_u8(half_packed, vdup_n_u8(0));
+                    vst1_u8(self.seq.as_mut_ptr().add(idx), packed);
+                    idx += 4;
+                    self.len += 16;
+                }
             }
         }
 

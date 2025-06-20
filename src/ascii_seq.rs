@@ -72,7 +72,48 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
             }
         }
 
-        #[cfg(not(all(target_arch = "x86_64", target_feature = "bmi2")))]
+        #[cfg(target_feature = "neon")]
+        {
+            use core::arch::aarch64::{vandq_u8, vdup_n_u8, vld1q_u8, vpadd_u8, vshlq_u8};
+            use core::mem::transmute;
+
+            for i in (0..len).step_by(16) {
+                let packed_bytes: u64 = if i + 16 <= self.len() {
+                    unsafe {
+                        let ascii = vld1q_u8(self.0.as_ptr().add(i));
+                        let masked_bits = vandq_u8(ascii, transmute([6i8; 16]));
+                        let (bits_0, bits_1) = transmute(vshlq_u8(
+                            masked_bits,
+                            transmute([-1i8, 1, 3, 5, -1, 1, 3, 5, -1, 1, 3, 5, -1, 1, 3, 5]),
+                        ));
+                        let half_packed = vpadd_u8(bits_0, bits_1);
+                        let packed = vpadd_u8(half_packed, vdup_n_u8(0));
+                        transmute(packed)
+                    }
+                } else {
+                    let mut chunk: [u8; 16] = [0; 16];
+                    // Copy only part of the slice to avoid out-of-bounds indexing.
+                    chunk[..self.len() - i].copy_from_slice(self.0[i..].try_into().unwrap());
+                    unsafe {
+                        let ascii = vld1q_u8(chunk.as_ptr());
+                        let masked_bits = vandq_u8(ascii, transmute([6i8; 16]));
+                        let (bits_0, bits_1) = transmute(vshlq_u8(
+                            masked_bits,
+                            transmute([-1i8, 1, 3, 5, -1, 1, 3, 5, -1, 1, 3, 5, -1, 1, 3, 5]),
+                        ));
+                        let half_packed = vpadd_u8(bits_0, bits_1);
+                        let packed = vpadd_u8(half_packed, vdup_n_u8(0));
+                        transmute(packed)
+                    }
+                };
+                val |= packed_bytes << (i * 2);
+            }
+        }
+
+        #[cfg(not(any(
+            all(target_arch = "x86_64", target_feature = "bmi2"),
+            target_feature = "neon"
+        )))]
         {
             for (i, &base) in self.0.iter().enumerate() {
                 val |= (pack_char(base) as u64) << (i * 2);
