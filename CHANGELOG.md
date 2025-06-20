@@ -1,6 +1,7 @@
 # Changelog
 
 ## 3.0
+- Speed up `PackedSeqVec::push_ascii()` on ARM
 - Add `Seq::to_revcomp()`.
 - Add `PackedSeqVec::clear()`.
 - `PackedSeq::as_u64` now supports k up to 32, instead of only up to 29. (Fixes #2.)
