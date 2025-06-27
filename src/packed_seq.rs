@@ -642,7 +642,7 @@ impl SeqVec for PackedSeqVec {
         let start = self.len.next_multiple_of(4) + seq.offset;
         let end = start + seq.len();
         // Drop padding bytes at the end.
-        self.seq.resize(self.len.next_multiple_of(4), 0);
+        self.seq.resize(self.len.div_ceil(4), 0);
         // Extend with new sequence and padding.
         self.seq.reserve(self.seq.len() + seq.seq.len() + PADDING);
         self.seq.extend(seq.seq);
