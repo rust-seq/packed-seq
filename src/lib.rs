@@ -100,6 +100,7 @@ mod traits;
 mod ascii;
 mod ascii_seq;
 mod packed_seq;
+mod simd_types;
 
 #[cfg(test)]
 mod test;
@@ -121,3 +122,5 @@ use core::array::from_fn;
 use mem_dbg::{MemDbg, MemSize};
 use std::{hint::assert_unchecked, ops::Range};
 use wide::u32x8 as S;
+
+pub(crate) use simd_types::*;
