@@ -19,7 +19,7 @@ pub struct PackedSeq<'s> {
 const PADDING: usize = 16;
 
 /// A 2-bit packed owned sequence of DNA bases.
-#[derive(Clone, Debug, Default, MemSize, MemDbg)]
+#[derive(Clone, Debug, MemSize, MemDbg)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[cfg_attr(feature = "epserde", derive(epserde::Epserde))]
 pub struct PackedSeqVec {
@@ -30,6 +30,15 @@ pub struct PackedSeqVec {
 
     /// The length, in bp, of the underlying sequence. See `.len()`.
     len: usize,
+}
+
+impl Default for PackedSeqVec {
+    fn default() -> Self {
+        Self {
+            seq: vec![0; PADDING],
+            len: 0,
+        }
+    }
 }
 
 /// Pack an ASCII `ACTGactg` character into its 2-bit representation.
