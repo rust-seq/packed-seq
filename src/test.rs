@@ -676,3 +676,29 @@ fn as_u64_read_unaligned_does_not_segfault() {
         vs.push(seq);
     }
 }
+
+#[test]
+fn packed_seq_push_seq() {
+    let mut packed = PackedSeqVec::default();
+    let mut rng = rand::rng();
+    let mut total_len_in_bp = 0;
+    let num_seqs = 100;
+    let mut last_end = 0;
+    for _ in 0..num_seqs {
+        let len = rng.random_range(0..100);
+        let new = PackedSeqVec::random(len);
+        eprintln!("new len {len} seq len {}", new.seq.len());
+        let range = packed.push_seq(new.as_slice());
+        assert!(range.start <= last_end + 3);
+        assert_eq!(range.len(), len);
+        last_end = range.end;
+        eprintln!(
+            "len {len} range {range:?} cur len bp {} bytes {} capacity {}",
+            packed.len(),
+            packed.seq.len(),
+            packed.seq.capacity()
+        );
+        total_len_in_bp += len.next_multiple_of(4);
+    }
+    assert_eq!(packed.seq.len(), total_len_in_bp.div_ceil(4) + 16,);
+}

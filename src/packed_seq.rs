@@ -641,11 +641,13 @@ impl SeqVec for PackedSeqVec {
     fn push_seq<'a>(&mut self, seq: PackedSeq<'_>) -> Range<usize> {
         let start = self.len.next_multiple_of(4) + seq.offset;
         let end = start + seq.len();
-        // Drop padding bytes at the end.
+        // Reserve *additional* capacity.
+        self.seq.reserve(seq.seq.len());
+        // Shrink away the padding.
         self.seq.resize(self.len.div_ceil(4), 0);
-        // Extend with new sequence and padding.
-        self.seq.reserve(self.seq.len() + seq.seq.len() + PADDING);
+        // Extend.
         self.seq.extend(seq.seq);
+        // Push padding.
         self.seq.extend(std::iter::repeat_n(0u8, PADDING));
         self.len = end;
         start..end
