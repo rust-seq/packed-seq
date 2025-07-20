@@ -12,15 +12,14 @@ Fast SIMD-based iteration over sequences is supported by splitting the sequence
 into 8 (slightly overlapping) chunks and iterating those in parallel in a
 memory-efficient way.
 
-The underlying algorithm is described in the following
-[preprint](https://doi.org/10.1101/2025.01.27.634998) on
-[`simd-minimizers`](https://github.com/rust-seq/simd-minimizers), for which this
+**Paper:**
+Please cite the
+[`simd-minimizers`](https://github.com/rust-seq/simd-minimizers) paper, for which this
 crate was developed:
 
--   SimdMinimizers: Computing random minimizers, fast.
-    Ragnar Groot Koerkamp, Igor Martayan
-    bioRxiv 2025.01.27 [doi.org/10.1101/2025.01.27.634998](https://doi.org/10.1101/2025.01.27.634998)
-
+- SimdMinimizers: Computing Random Minimizers, fast.  
+  Ragnar Groot Koerkamp, Igor Martayan.
+  SEA 2025 [https://doi.org/10.4230/LIPIcs.SEA.2025.20](doi.org/10.4230/LIPIcs.SEA.2025.20)
 
 ## Requirements
 
