@@ -41,7 +41,7 @@ impl Default for PackedSeqVec {
     }
 }
 
-/// Pack an ASCII `ACTGactg` character into its 2-bit representation.
+/// Pack an ASCII `ACTGactg` character into its 2-bit representation, and panic for anything else.
 #[inline(always)]
 pub fn pack_char(base: u8) -> u8 {
     match base {
@@ -54,6 +54,12 @@ pub fn pack_char(base: u8) -> u8 {
             base as char
         ),
     }
+}
+
+/// Pack an ASCII `ACTGactg` character into its 2-bit representation, and silently convert other characters into 0..4 as well.
+#[inline(always)]
+pub fn pack_char_lossy(base: u8) -> u8 {
+    (base >> 1) & 3
 }
 
 /// Unpack a 2-bit DNA base into the corresponding `ACTG` character.
@@ -664,14 +670,15 @@ impl SeqVec for PackedSeqVec {
 
     /// Push an ASCII sequence to an `PackedSeqVec`.
     /// `Aa` map to `0`, `Cc` to `1`, `Gg` to `3`, and `Tt` to `2`.
-    /// Other characters may be silently mapped into `[0, 4)` or panic.
-    /// (TODO: Explicitly support different conversions.)
+    /// Other characters are silently mapped into `0..4`.
     ///
     /// Uses the BMI2 `pext` instruction when available, based on the
     /// `n_to_bits_pext` method described at
     /// <https://github.com/Daniel-Liu-c0deb0t/cute-nucleotides>.
     ///
-    /// TODO: Support multiple ways of dealing with non-`ACTG` characters.
+    /// TODO: Support multiple ways of dealing with non-`ACTG` characters:
+    /// - panic on non-`ACGT`,
+    /// - filter out non-`ACGT`.
     fn push_ascii(&mut self, seq: &[u8]) -> Range<usize> {
         self.seq
             .resize((self.len + seq.len()).div_ceil(4) + PADDING, 0);
@@ -684,7 +691,7 @@ impl SeqVec for PackedSeqVec {
         if unaligned > 0 {
             let mut packed_byte = self.seq[idx];
             for &base in &seq[..unaligned] {
-                packed_byte |= pack_char(base) << ((self.len % 4) * 2);
+                packed_byte |= pack_char_lossy(base) << ((self.len % 4) * 2);
                 self.len += 1;
             }
             self.seq[idx] = packed_byte;
@@ -737,7 +744,7 @@ impl SeqVec for PackedSeqVec {
 
         let mut packed_byte = 0;
         for &base in &seq[last..] {
-            packed_byte |= pack_char(base) << ((self.len % 4) * 2);
+            packed_byte |= pack_char_lossy(base) << ((self.len % 4) * 2);
             self.len += 1;
             if self.len % 4 == 0 {
                 self.seq[idx] = packed_byte;

@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1
+- `PackedSeqVec::{from,push}_ascii` now silently convert non-ACGT characters to
+  values in `0..4`, instead of inconsistently only panicking for non-ACGT near
+  the sequence start and end.
+
 ## 3.0
 - Speed up `PackedSeqVec::push_ascii()` on ARM
 - Add `Seq::to_revcomp()`.
