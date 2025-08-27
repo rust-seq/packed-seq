@@ -279,7 +279,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         let n = num_kmers.div_ceil(L);
         let padding = L * n - num_kmers;
 
-        let offsets: [usize; 8] = from_fn(|l| (l * n));
+        let offsets: [usize; 8] = from_fn(|l| l * n);
         let mut cur = S::ZERO;
 
         // Boxed, so it doesn't consume precious registers.
@@ -331,7 +331,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         let n = num_kmers.div_ceil(L);
         let padding = L * n - num_kmers;
 
-        let offsets: [usize; 8] = from_fn(|l| (l * n));
+        let offsets: [usize; 8] = from_fn(|l| l * n);
         let mut upcoming = S::ZERO;
         let mut upcoming_d = S::ZERO;
 
@@ -404,7 +404,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         let n = num_kmers.div_ceil(L);
         let padding = L * n - num_kmers;
 
-        let offsets: [usize; 8] = from_fn(|l| (l * n));
+        let offsets: [usize; 8] = from_fn(|l| l * n);
 
         let mut upcoming = S::ZERO;
         let mut upcoming_d1 = S::ZERO;

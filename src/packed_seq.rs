@@ -341,7 +341,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let bytes_per_chunk = n / 4;
         let padding = 4 * L * bytes_per_chunk - num_kmers_stride;
 
-        let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk));
+        let offsets: [usize; 8] = from_fn(|l| l * bytes_per_chunk);
         let mut cur = S::ZERO;
 
         // Boxed, so it doesn't consume precious registers.
@@ -413,7 +413,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let bytes_per_chunk = n / 4;
         let padding = 4 * L * bytes_per_chunk - num_kmers_stride;
 
-        let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk));
+        let offsets: [usize; 8] = from_fn(|l| l * bytes_per_chunk);
         let mut upcoming = S::ZERO;
         let mut upcoming_d = S::ZERO;
 
@@ -508,7 +508,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let bytes_per_chunk = n / 4;
         let padding = 4 * L * bytes_per_chunk - num_kmers_stride;
 
-        let offsets: [usize; 8] = from_fn(|l| (l * bytes_per_chunk));
+        let offsets: [usize; 8] = from_fn(|l| l * bytes_per_chunk);
         let mut upcoming = S::ZERO;
         let mut upcoming_d1 = S::ZERO;
         let mut upcoming_d2 = S::ZERO;
