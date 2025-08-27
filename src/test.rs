@@ -166,6 +166,71 @@ fn pack_word() {
 }
 
 #[test]
+fn pack_u128() {
+    let packed = PackedSeqVec::from_ascii(b"ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT");
+    let slice = packed.slice(0..1);
+    assert_eq!(slice.as_u128(), 0b0000000000000000);
+    let slice = packed.slice(1..2);
+    assert_eq!(slice.as_u128(), 0b0000000000000001);
+    let slice = packed.slice(2..3);
+    assert_eq!(slice.as_u128(), 0b0000000000000011);
+    let slice = packed.slice(3..4);
+    assert_eq!(slice.as_u128(), 0b0000000000000010);
+    let slice = packed.slice(0..2);
+    assert_eq!(slice.as_u128(), 0b0000000000000100);
+    let slice = packed.slice(0..3);
+    assert_eq!(slice.as_u128(), 0b0000000000110100);
+    assert_eq!(
+        packed.slice(0..30).as_u128(),
+        0b010010110100101101001011010010110100101101001011010010110100
+    );
+    assert_eq!(
+        packed.slice(0..31).as_u128(),
+        0b11010010110100101101001011010010110100101101001011010010110100
+    );
+    assert_eq!(
+        packed.slice(0..32).as_u128(),
+        0b1011010010110100101101001011010010110100101101001011010010110100
+    );
+    assert_eq!(
+        packed.slice(0..33).as_u128(),
+        0b001011010010110100101101001011010010110100101101001011010010110100
+    );
+    assert_eq!(
+        packed.slice(0..34).as_u128(),
+        0b01001011010010110100101101001011010010110100101101001011010010110100
+    );
+    assert_eq!(
+        packed.slice(0..35).as_u128(),
+        0b1101001011010010110100101101001011010010110100101101001011010010110100
+    );
+    assert_eq!(
+        packed.slice(0..36).as_u128(),
+        0b101101001011010010110100101101001011010010110100101101001011010010110100
+    );
+    assert_eq!(
+        packed.slice(1..36).as_u128(),
+        0b1011010010110100101101001011010010110100101101001011010010110100101101
+    );
+    assert_eq!(
+        packed.slice(2..36).as_u128(),
+        0b10110100101101001011010010110100101101001011010010110100101101001011
+    );
+    assert_eq!(
+        packed.slice(0..64).as_u128(),
+        0b10110100101101001011010010110100101101001011010010110100101101001011010010110100101101001011010010110100101101001011010010110100
+    );
+    assert_eq!(
+        packed.slice(0..63).as_u128(),
+        0b110100101101001011010010110100101101001011010010110100101101001011010010110100101101001011010010110100101101001011010010110100
+    );
+    assert_eq!(
+        packed.slice(1..64).as_u128(),
+        0b101101001011010010110100101101001011010010110100101101001011010010110100101101001011010010110100101101001011010010110100101101
+    );
+}
+
+#[test]
 fn packed_ord() {
     let ascii_seq = b"ACGTACGTACGTACGTACGTACGTACGT";
     let packed_seq = ascii_seq
