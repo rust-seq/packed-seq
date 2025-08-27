@@ -1,7 +1,12 @@
 # Changelog
 
-## 3.2
+## 3.2.1
+- Add `Seq::read_{revcomp}_kmer_u128` with more tests
+- Fix bug in `revcomp_u128`
+
+## 3.2.0: yanked
 - Add `Seq::as_u128` and `Seq::revcomp_as_u128`
+- `revcomp_u128` had a bug; fixed in 3.2.1
 
 ## 3.1
 - `PackedSeqVec::{from,push}_ascii` now silently convert non-ACGT characters to
