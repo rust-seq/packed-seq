@@ -1,5 +1,8 @@
 # Changelog
 
+## 3.2
+- Add `Seq::as_u128` and `Seq::revcomp_as_u128`
+
 ## 3.1
 - `PackedSeqVec::{from,push}_ascii` now silently convert non-ACGT characters to
   values in `0..4`, instead of inconsistently only panicking for non-ACGT near

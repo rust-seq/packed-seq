@@ -41,6 +41,18 @@ impl Seq<'_> for &[u8] {
         unimplemented!("Reverse complement is only defined for DNA sequences, use `AsciiSeq` or `PackedSeq` instead.")
     }
 
+    #[inline(always)]
+    fn as_u128(&self) -> u128 {
+        assert!(self.len() <= u128::BITS as usize / 8);
+        let mask = u128::MAX >> (128 - 8 * self.len());
+        unsafe { (self.as_ptr() as *const u128).read_unaligned() & mask }
+    }
+
+    #[inline(always)]
+    fn revcomp_as_u128(&self) -> u128 {
+        unimplemented!("Reverse complement is only defined for DNA sequences, use `AsciiSeq` or `PackedSeq` instead.")
+    }
+
     /// Convert to an owned version.
     #[inline(always)]
     fn to_vec(&self) -> Vec<u8> {
