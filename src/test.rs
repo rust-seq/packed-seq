@@ -703,6 +703,29 @@ fn rc_rc_u64() {
 }
 
 #[test]
+fn rc_rc_u128() {
+    let n = 10000;
+    let seq = PackedSeqVec::random(n);
+    for k in 1..=61 {
+        for i in 0..=(n - k) {
+            let word = seq.read_kmer_u128(k, i);
+            let rc = seq.read_revcomp_kmer_u128(k, i);
+            assert_eq!(packed_seq::revcomp_u128(word, k), rc, "k={k} i={i}");
+            assert_eq!(packed_seq::revcomp_u128(rc, k), word, "k={k} i={i}");
+        }
+    }
+    let seq = AsciiSeqVec::random(n);
+    for k in 1..=61 {
+        for i in 0..=(n - k) {
+            let word = seq.read_kmer_u128(k, i);
+            let rc = seq.read_revcomp_kmer_u128(k, i);
+            assert_eq!(packed_seq::revcomp_u128(word, k), rc, "k={k} i={i}");
+            assert_eq!(packed_seq::revcomp_u128(rc, k), word, "k={k} i={i}");
+        }
+    }
+}
+
+#[test]
 fn rc_rc_seq() {
     for n in (0..100).chain(100000..100000 + 10) {
         {
