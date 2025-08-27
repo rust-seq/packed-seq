@@ -123,9 +123,91 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         val
     }
 
+    // TODO: Dedup against as_u64.
+    #[inline(always)]
+    fn as_u128(&self) -> u128 {
+        let len = self.len();
+        assert!(len <= u128::BITS as usize / 2);
+
+        let mut val = 0u128;
+
+        #[cfg(all(target_arch = "x86_64", target_feature = "bmi2"))]
+        {
+            for i in (0..len).step_by(8) {
+                let packed_bytes = if i + 8 <= self.len() {
+                    let chunk: &[u8; 8] = &self.0[i..i + 8].try_into().unwrap();
+                    let ascii = u64::from_ne_bytes(*chunk);
+                    unsafe { std::arch::x86_64::_pext_u64(ascii, 0x0606060606060606) }
+                } else {
+                    let mut chunk: [u8; 8] = [0; 8];
+                    // Copy only part of the slice to avoid out-of-bounds indexing.
+                    chunk[..self.len() - i].copy_from_slice(self.0[i..].try_into().unwrap());
+                    let ascii = u64::from_ne_bytes(chunk);
+                    unsafe { std::arch::x86_64::_pext_u64(ascii, 0x0606060606060606) }
+                };
+                val |= (packed_bytes as u128) << (i * 2);
+            }
+        }
+
+        #[cfg(target_feature = "neon")]
+        {
+            use core::arch::aarch64::{vandq_u8, vdup_n_u8, vld1q_u8, vpadd_u8, vshlq_u8};
+            use core::mem::transmute;
+
+            for i in (0..len).step_by(16) {
+                let packed_bytes: u64 = if i + 16 <= self.len() {
+                    unsafe {
+                        let ascii = vld1q_u8(self.0.as_ptr().add(i));
+                        let masked_bits = vandq_u8(ascii, transmute([6i8; 16]));
+                        let (bits_0, bits_1) = transmute(vshlq_u8(
+                            masked_bits,
+                            transmute([-1i8, 1, 3, 5, -1, 1, 3, 5, -1, 1, 3, 5, -1, 1, 3, 5]),
+                        ));
+                        let half_packed = vpadd_u8(bits_0, bits_1);
+                        let packed = vpadd_u8(half_packed, vdup_n_u8(0));
+                        transmute(packed)
+                    }
+                } else {
+                    let mut chunk: [u8; 16] = [0; 16];
+                    // Copy only part of the slice to avoid out-of-bounds indexing.
+                    chunk[..self.len() - i].copy_from_slice(self.0[i..].try_into().unwrap());
+                    unsafe {
+                        let ascii = vld1q_u8(chunk.as_ptr());
+                        let masked_bits = vandq_u8(ascii, transmute([6i8; 16]));
+                        let (bits_0, bits_1) = transmute(vshlq_u8(
+                            masked_bits,
+                            transmute([-1i8, 1, 3, 5, -1, 1, 3, 5, -1, 1, 3, 5, -1, 1, 3, 5]),
+                        ));
+                        let half_packed = vpadd_u8(bits_0, bits_1);
+                        let packed = vpadd_u8(half_packed, vdup_n_u8(0));
+                        transmute(packed)
+                    }
+                };
+                val |= (packed_bytes as u128) << (i * 2);
+            }
+        }
+
+        #[cfg(not(any(
+            all(target_arch = "x86_64", target_feature = "bmi2"),
+            target_feature = "neon"
+        )))]
+        {
+            for (i, &base) in self.0.iter().enumerate() {
+                val |= (pack_char(base) as u128) << (i * 2);
+            }
+        }
+
+        val
+    }
+
     #[inline(always)]
     fn revcomp_as_u64(&self) -> u64 {
         packed_seq::revcomp_u64(self.as_u64(), self.len())
+    }
+
+    #[inline(always)]
+    fn revcomp_as_u128(&self) -> u128 {
+        packed_seq::revcomp_u128(self.as_u128(), self.len())
     }
 
     /// Convert to an owned version.

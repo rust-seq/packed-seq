@@ -93,15 +93,14 @@ pub fn complement_base_simd(base: u32x8) -> u32x8 {
     base ^ u32x8::splat(2)
 }
 
-/// Compute the reverse complement of a short sequence packed in a `u64`.
+/// Reverse complement the 2-bit pairs in the input.
 #[inline(always)]
-pub const fn revcomp_u64(word: u64, len: usize) -> u64 {
+const fn revcomp_raw(word: u64) -> u64 {
     #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
     {
         let mut res = word.reverse_bits(); // ARM can reverse bits in a single instruction
         res = ((res >> 1) & 0x5555_5555_5555_5555) | ((res & 0x5555_5555_5555_5555) << 1);
-        res ^= 0xAAAA_AAAA_AAAA_AAAA;
-        res >> (usize::BITS as usize - 2 * len)
+        res ^ 0xAAAA_AAAA_AAAA_AAAA
     }
 
     #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
@@ -109,9 +108,24 @@ pub const fn revcomp_u64(word: u64, len: usize) -> u64 {
         let mut res = word.swap_bytes();
         res = ((res >> 4) & 0x0F0F_0F0F_0F0F_0F0F) | ((res & 0x0F0F_0F0F_0F0F_0F0F) << 4);
         res = ((res >> 2) & 0x3333_3333_3333_3333) | ((res & 0x3333_3333_3333_3333) << 2);
-        res ^= 0xAAAA_AAAA_AAAA_AAAA;
-        res >> (usize::BITS as usize - 2 * len)
+        res ^ 0xAAAA_AAAA_AAAA_AAAA
     }
+}
+
+/// Compute the reverse complement of a short sequence packed in a `u64`.
+#[inline(always)]
+pub const fn revcomp_u64(word: u64, len: usize) -> u64 {
+    revcomp_raw(word) >> (usize::BITS as usize - 2 * len)
+}
+
+#[inline(always)]
+pub const fn revcomp_u128(word: u128, len: usize) -> u128 {
+    let low = word as u64;
+    let high = (word >> 64) as u64;
+    let rlow = revcomp_u64(low, len);
+    let rhigh = revcomp_u64(high, len);
+    let out = ((rlow as u128) << 64) | rhigh as u128;
+    out >> (u128::BITS as usize - 2 * len)
 }
 
 impl PackedSeq<'_> {
@@ -174,7 +188,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         unpack_base(self.get(index))
     }
 
-    /// Convert a short sequence (kmer) to a packed representation as `usize`.
+    /// Convert a short sequence (kmer) to a packed representation as `u64`.
     /// Panics if `self` is longer than 32 characters.
     #[inline(always)]
     fn as_u64(&self) -> u64 {
@@ -194,11 +208,38 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         }
     }
 
+    /// Convert a short sequence (kmer) to a packed representation as `u128`.
+    /// Panics if `self` is longer than 64 characters.
+    #[inline(always)]
+    fn as_u128(&self) -> u128 {
+        assert!(self.len() <= 64);
+        debug_assert!(self.seq.len() <= 17);
+
+        let mask = u128::MAX >> (128 - 2 * self.len());
+
+        // The unaligned read is OK, because we ensure that the underlying `PackedSeqVec::seq` always
+        // has at least 16 bytes (the size of a u128) of padding at the end.
+        if self.len() <= 29 {
+            let x = unsafe { (self.seq.as_ptr() as *const u128).read_unaligned() };
+            (x >> (2 * self.offset)) & mask
+        } else {
+            let x = unsafe { (self.seq.as_ptr() as *const u128).read_unaligned() };
+            (x >> (2 * self.offset)) as u128 & mask
+        }
+    }
+
     /// Convert a short sequence (kmer) to a packed representation of its reverse complement as `usize`.
     /// Panics if `self` is longer than 32 characters.
     #[inline(always)]
     fn revcomp_as_u64(&self) -> u64 {
         revcomp_u64(self.as_u64(), self.len())
+    }
+
+    /// Convert a short sequence (kmer) to a packed representation of its reverse complement as `usize`.
+    /// Panics if `self` is longer than 64 characters.
+    #[inline(always)]
+    fn revcomp_as_u128(&self) -> u128 {
+        revcomp_u128(self.as_u128(), self.len())
     }
 
     #[inline(always)]

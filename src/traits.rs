@@ -44,6 +44,12 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     /// Convert a short sequence (kmer) to a packed representation of its reverse complement as `u64`.
     fn revcomp_as_u64(&self) -> u64;
 
+    /// Convert a short sequence (kmer) to a packed representation as `u128`.
+    fn as_u128(&self) -> u128;
+
+    /// Convert a short sequence (kmer) to a packed representation of its reverse complement as `u128`.
+    fn revcomp_as_u128(&self) -> u128;
+
     /// Convert a short sequence (kmer) to a packed representation as `usize`.
     #[deprecated = "Prefer `to_u64`."]
     #[inline(always)]
