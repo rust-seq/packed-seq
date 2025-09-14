@@ -2,6 +2,16 @@ use super::u32x8;
 use mem_dbg::{MemDbg, MemSize};
 use std::ops::Range;
 
+/// Trait alias for iterators over multiple chunks in parallel, typically over `u32x8`.
+pub trait ChunkIt<T>: ExactSizeIterator<Item = T> {}
+impl<T, I: ExactSizeIterator<Item = T>> ChunkIt<T> for I {}
+
+/// An iterator over multiple lanes, with a given amount of padding at the end of the last lane(s).
+pub struct PaddedIt<I> {
+    pub it: I,
+    pub padding: usize,
+}
+
 /// A non-owned slice of characters.
 ///
 /// The represented character values are expected to be in `[0, 2^b)`,
@@ -110,7 +120,7 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     /// When `context>1`, consecutive chunks overlap by `context-1` bases.
     ///
     /// Expected to be implemented using SIMD instructions.
-    fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = u32x8> + Clone, usize);
+    fn par_iter_bp(self, context: usize) -> PaddedIt<impl ChunkIt<u32x8>>;
 
     /// Iterate over 8 chunks of the sequence in parallel, returning two characters offset by `delay` positions.
     ///
@@ -127,7 +137,7 @@ pub trait Seq<'s>: Copy + Eq + Ord {
         self,
         context: usize,
         delay: usize,
-    ) -> (impl ExactSizeIterator<Item = (u32x8, u32x8)> + Clone, usize);
+    ) -> PaddedIt<impl ChunkIt<(u32x8, u32x8)>>;
 
     /// Iterate over 8 chunks of the sequence in parallel, returning three characters:
     /// the char added, the one `delay` positions before, and the one `delay2` positions before.
@@ -148,10 +158,7 @@ pub trait Seq<'s>: Copy + Eq + Ord {
         context: usize,
         delay1: usize,
         delay2: usize,
-    ) -> (
-        impl ExactSizeIterator<Item = (u32x8, u32x8, u32x8)> + Clone,
-        usize,
-    );
+    ) -> PaddedIt<impl ChunkIt<(u32x8, u32x8, u32x8)>>;
 
     /// Compare and return the LCP of the two sequences.
     fn cmp_lcp(&self, other: &Self) -> (std::cmp::Ordering, usize);

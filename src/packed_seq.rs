@@ -1,6 +1,6 @@
 use traits::Seq;
 
-use crate::intrinsics::transpose;
+use crate::{intrinsics::transpose, traits::ChunkIt};
 
 use super::*;
 
@@ -212,7 +212,10 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
     /// Panics if `self` is longer than 64 characters.
     #[inline(always)]
     fn as_u128(&self) -> u128 {
-        assert!(self.len() <= 61, "Sequences >61 long cannot be read with a single unaligned u128 read.");
+        assert!(
+            self.len() <= 61,
+            "Sequences >61 long cannot be read with a single unaligned u128 read."
+        );
         debug_assert!(self.seq.len() <= 17);
 
         let mask = u128::MAX >> (128 - 2 * self.len());
@@ -322,7 +325,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
     }
 
     #[inline(always)]
-    fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S> + Clone, usize) {
+    fn par_iter_bp(self, context: usize) -> PaddedIt<impl ChunkIt<S>> {
         #[cfg(target_endian = "big")]
         panic!("Big endian architectures are not supported.");
 
@@ -378,17 +381,13 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         // Drop the first few chars.
         it.by_ref().take(o).for_each(drop);
 
-        (it, padding)
+        PaddedIt { it, padding }
     }
 
     /// NOTE: When `self` starts does not start at a byte boundary, the
     /// 'delayed' character is not guaranteed to be `0`.
     #[inline(always)]
-    fn par_iter_bp_delayed(
-        self,
-        context: usize,
-        delay: usize,
-    ) -> (impl ExactSizeIterator<Item = (S, S)> + Clone, usize) {
+    fn par_iter_bp_delayed(self, context: usize, delay: usize) -> PaddedIt<impl ChunkIt<(S, S)>> {
         #[cfg(target_endian = "big")]
         panic!("Big endian architectures are not supported.");
 
@@ -477,7 +476,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         );
         it.by_ref().take(o).for_each(drop);
 
-        (it, padding)
+        PaddedIt { it, padding }
     }
 
     /// NOTE: When `self` starts does not start at a byte boundary, the
@@ -488,7 +487,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         context: usize,
         delay1: usize,
         delay2: usize,
-    ) -> (impl ExactSizeIterator<Item = (S, S, S)> + Clone, usize) {
+    ) -> PaddedIt<impl ChunkIt<(S, S, S)>> {
         #[cfg(target_endian = "big")]
         panic!("Big endian architectures are not supported.");
 
@@ -580,7 +579,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         );
         it.by_ref().take(o).for_each(drop);
 
-        (it, padding)
+        PaddedIt { it, padding }
     }
 
     /// Compares 29 characters at a time.

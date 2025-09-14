@@ -167,7 +167,9 @@ fn pack_word() {
 
 #[test]
 fn pack_u128() {
-    let packed = PackedSeqVec::from_ascii(b"ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT");
+    let packed = PackedSeqVec::from_ascii(
+        b"ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT",
+    );
     let slice = packed.slice(0..1);
     assert_eq!(slice.as_u128(), 0b0000000000000000);
     let slice = packed.slice(1..2);
@@ -336,15 +338,15 @@ fn iter_bp() {
 #[test]
 fn par_iter_bp() {
     let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
-    let (head, padding) = s.as_slice().par_iter_bp(1);
-    let head = head.collect::<Vec<_>>();
+    let PaddedIt { it, padding } = s.as_slice().par_iter_bp(1);
+    let it = it.collect::<Vec<_>>();
     fn f(x: &[u8; 8]) -> u32x8 {
         let x = x.map(|x| pack_char(x) as u32);
         u32x8::from(x)
     }
     assert_eq!(padding, 8 * 8 - s.len());
     assert_eq!(
-        head,
+        it,
         vec![
             f(b"AGCAAAAA"),
             f(b"CGCACAAA"),
@@ -361,8 +363,8 @@ fn par_iter_bp() {
 #[test]
 fn par_iter_bp_delayed0() {
     let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
-    let (head, padding) = s.as_slice().par_iter_bp_delayed(1, 0);
-    let head = head.collect::<Vec<_>>();
+    let PaddedIt { it, padding } = s.as_slice().par_iter_bp_delayed(1, 0);
+    let it = it.collect::<Vec<_>>();
     fn f(x: &[u8; 8], y: &[u8; 8]) -> (u32x8, u32x8) {
         let x = x.map(|x| pack_char(x) as u32);
         let y = y.map(|x| pack_char(x) as u32);
@@ -370,7 +372,7 @@ fn par_iter_bp_delayed0() {
     }
     assert_eq!(padding, 8 * 8 - s.len());
     assert_eq!(
-        head,
+        it,
         vec![
             f(b"AGCAAAAA", b"AGCAAAAA"),
             f(b"CGCACAAA", b"CGCACAAA"),
@@ -387,8 +389,8 @@ fn par_iter_bp_delayed0() {
 #[test]
 fn par_iter_bp_delayed1() {
     let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
-    let (head, padding) = s.as_slice().par_iter_bp_delayed(1, 1);
-    let head = head.collect::<Vec<_>>();
+    let PaddedIt { it, padding } = s.as_slice().par_iter_bp_delayed(1, 1);
+    let it = it.collect::<Vec<_>>();
     fn f(x: &[u8; 8], y: &[u8; 8]) -> (u32x8, u32x8) {
         let x = x.map(|x| pack_char(x) as u32);
         let y = y.map(|x| pack_char(x) as u32);
@@ -396,7 +398,7 @@ fn par_iter_bp_delayed1() {
     }
     assert_eq!(padding, 8 * 8 - s.len());
     assert_eq!(
-        head,
+        it,
         vec![
             f(b"AGCAAAAA", b"AAAAAAAA"),
             f(b"CGCACAAA", b"AGCAAAAA"),
@@ -439,38 +441,38 @@ fn par_iter_bp_fuzz() {
 
         let context = random_range(1..=512.min(len).max(1));
         eprintln!("CONTEXT: {context:?}");
-        let (head, padding) = s.par_iter_bp(context);
-        let head = head.collect::<Vec<_>>();
+        let PaddedIt { it, padding } = s.par_iter_bp(context);
+        let it = it.collect::<Vec<_>>();
         fn f(x: &[u8; 8]) -> u32x8 {
             let x = x.map(|x| pack_char(x) as u32);
             u32x8::from(x)
         }
 
-        let head_len = head.len();
-        eprintln!("par it len {head_len}");
+        let it_len = it.len();
+        eprintln!("par it len {it_len}");
         eprintln!("padding: {padding}");
 
         // Test padding len.
-        assert_eq!(8 * head_len, len + 7 * (context - 1) + padding);
+        assert_eq!(8 * it_len, len + 7 * (context - 1) + padding);
         assert!(padding < 32);
 
         // Test context overlap.
         for i in 0..7 {
             for j in 0..context - 1 {
                 assert_eq!(
-                    head[head_len - (context - 1) + j].as_array_ref()[i],
-                    head[j].as_array_ref()[i + 1],
+                    it[it_len - (context - 1) + j].as_array_ref()[i],
+                    it[j].as_array_ref()[i + 1],
                     "Context check failed at {i} {j}"
                 );
             }
         }
 
-        let stride = head_len - (context - 1);
+        let stride = it_len - (context - 1);
         eprintln!("stride {stride}");
 
         assert_eq!(
-            head,
-            (0..head_len)
+            it,
+            (0..it_len)
                 .map(|i| { f(&from_fn(|j| get(seq.0, i + stride * j))) })
                 .collect::<Vec<_>>()
         );
@@ -501,38 +503,38 @@ fn par_iter_bp_delayed_fuzz() {
         let context = 1;
         let delay = random_range(0..512);
         eprintln!("LEN {len} CONTEXT {context} DELAY {delay}");
-        let (head, padding) = s.par_iter_bp_delayed(context, delay);
+        let PaddedIt{it, padding} = s.par_iter_bp_delayed(context, delay);
         eprintln!("padding: {padding}");
-        let head = head.collect::<Vec<_>>();
+        let it = it.collect::<Vec<_>>();
         fn f(x: &[u8; 8], y: &[u8; 8]) -> (u32x8, u32x8) {
             let x = x.map(|x| pack_char(x) as u32);
             let y = y.map(|x| pack_char(x) as u32);
             (u32x8::from(x), u32x8::from(y))
         }
 
-        let head_len = head.len();
-        eprintln!("par it len {head_len}");
+        let it_len = it.len();
+        eprintln!("par it len {it_len}");
         eprintln!("padding: {padding}");
 
         // Test padding len.
-        assert_eq!(8 * head_len, len + 7 * (context - 1) + padding);
+        assert_eq!(8 * it_len, len + 7 * (context - 1) + padding);
         assert!(padding < 32);
 
         // Test context overlap.
         for i in 0..7 {
             for j in 0..context - 1 {
                 assert_eq!(
-                    head[head_len - (context - 1) + j].0.as_array_ref()[i],
-                    head[j].0.as_array_ref()[i + 1],
+                    it[it_len - (context - 1) + j].0.as_array_ref()[i],
+                    it[j].0.as_array_ref()[i + 1],
                     "Context check failed at {i} {j}"
                 );
             }
         }
 
-        let stride = head_len - (context - 1);
+        let stride = it_len - (context - 1);
         eprintln!("stride {stride}");
 
-        let ans = (0..head_len)
+        let ans = (0..it_len)
             .map(|i| {
                 f(
                     &from_fn(|j| get(seq.0, i + stride * j)),
@@ -546,14 +548,14 @@ fn par_iter_bp_delayed_fuzz() {
                 )
             })
             .collect::<Vec<_>>();
-        if head != ans {
-            for (i, (x, y)) in head.iter().zip(ans.iter()).enumerate() {
+        if it != ans {
+            for (i, (x, y)) in it.iter().zip(ans.iter()).enumerate() {
                 if x != y {
-                    eprintln!("head {i} {x:?} != {y:?}");
+                    eprintln!("it {i} {x:?} != {y:?}");
                 }
             }
         }
-        assert!(head == ans);
+        assert!(it == ans);
     }
 }
 
@@ -579,9 +581,9 @@ fn par_iter_bp_delayed2_fuzz() {
         let delay = random_range(0..512);
         let delay2 = random_range(delay..=512);
         eprintln!("LEN {len} CONTEXT {context} DELAY {delay}");
-        let (head, padding) = s.par_iter_bp_delayed_2(context, delay, delay2);
+        let PaddedIt { it, padding } = s.par_iter_bp_delayed_2(context, delay, delay2);
         eprintln!("padding: {padding}");
-        let head = head.collect::<Vec<_>>();
+        let it = it.collect::<Vec<_>>();
         fn f(x: &[u8; 8], y: &[u8; 8], z: &[u8; 8]) -> (u32x8, u32x8, u32x8) {
             let x = x.map(|x| pack_char(x) as u32);
             let y = y.map(|x| pack_char(x) as u32);
@@ -589,29 +591,29 @@ fn par_iter_bp_delayed2_fuzz() {
             (u32x8::from(x), u32x8::from(y), u32x8::from(z))
         }
 
-        let head_len = head.len();
-        eprintln!("par it len {head_len}");
+        let it_len = it.len();
+        eprintln!("par it len {it_len}");
         eprintln!("padding: {padding}");
 
         // Test padding len.
-        assert_eq!(8 * head_len, len + 7 * (context - 1) + padding);
+        assert_eq!(8 * it_len, len + 7 * (context - 1) + padding);
         assert!(padding < 32);
 
         // Test context overlap.
         for i in 0..7 {
             for j in 0..context - 1 {
                 assert_eq!(
-                    head[head_len - (context - 1) + j].0.as_array_ref()[i],
-                    head[j].0.as_array_ref()[i + 1],
+                    it[it_len - (context - 1) + j].0.as_array_ref()[i],
+                    it[j].0.as_array_ref()[i + 1],
                     "Context check failed at {i} {j}"
                 );
             }
         }
 
-        let stride = head_len - (context - 1);
+        let stride = it_len - (context - 1);
         eprintln!("stride {stride}");
 
-        let ans = (0..head_len)
+        let ans = (0..it_len)
             .map(|i| {
                 f(
                     &from_fn(|j| get(seq.0, i + stride * j)),
@@ -632,22 +634,22 @@ fn par_iter_bp_delayed2_fuzz() {
                 )
             })
             .collect::<Vec<_>>();
-        if head != ans {
-            for (i, (x, y)) in head.iter().zip(ans.iter()).enumerate() {
+        if it != ans {
+            for (i, (x, y)) in it.iter().zip(ans.iter()).enumerate() {
                 if x != y {
-                    eprintln!("head {i} {x:?} != {y:?}");
+                    eprintln!("it {i} {x:?} != {y:?}");
                 }
             }
         }
-        assert!(head == ans);
+        assert!(it == ans);
     }
 }
 
 #[test]
 fn par_iter_bp_delayed01() {
     let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
-    let (head, padding) = s.as_slice().par_iter_bp_delayed_2(1, 0, 1);
-    let head = head.collect::<Vec<_>>();
+    let PaddedIt { it, padding } = s.as_slice().par_iter_bp_delayed_2(1, 0, 1);
+    let it = it.collect::<Vec<_>>();
     fn f(x: &[u8; 8], y: &[u8; 8], z: &[u8; 8]) -> (u32x8, u32x8, u32x8) {
         let x = x.map(|x| pack_char(x) as u32);
         let y = y.map(|x| pack_char(x) as u32);
@@ -656,7 +658,7 @@ fn par_iter_bp_delayed01() {
     }
     assert_eq!(padding, 8 * 8 - s.len());
     assert_eq!(
-        head,
+        it,
         vec![
             f(b"AGCAAAAA", b"AGCAAAAA", b"AAAAAAAA"),
             f(b"CGCACAAA", b"CGCACAAA", b"AGCAAAAA"),

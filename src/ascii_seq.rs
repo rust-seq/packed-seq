@@ -1,4 +1,4 @@
-use crate::{intrinsics::transpose, packed_seq::read_slice};
+use crate::{intrinsics::transpose, packed_seq::read_slice, traits::ChunkIt};
 
 use super::*;
 
@@ -274,7 +274,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
 
     /// Iterate the basepairs in the sequence in 8 parallel streams, assuming values in `0..4`.
     #[inline(always)]
-    fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S> + Clone, usize) {
+    fn par_iter_bp(self, context: usize) -> PaddedIt<impl ChunkIt<S>> {
         let num_kmers = self.len().saturating_sub(context - 1);
         let n = num_kmers.div_ceil(L);
         let padding = L * n - num_kmers;
@@ -312,15 +312,11 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
             },
         );
 
-        (it, padding)
+        PaddedIt { it, padding }
     }
 
     #[inline(always)]
-    fn par_iter_bp_delayed(
-        self,
-        context: usize,
-        delay: usize,
-    ) -> (impl ExactSizeIterator<Item = (S, S)> + Clone, usize) {
+    fn par_iter_bp_delayed(self, context: usize, delay: usize) -> PaddedIt<impl ChunkIt<(S, S)>> {
         assert!(
             delay < usize::MAX / 2,
             "Delay={} should be >=0.",
@@ -388,7 +384,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
             },
         );
 
-        (it, padding)
+        PaddedIt { it, padding }
     }
 
     #[inline(always)]
@@ -397,7 +393,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
         context: usize,
         delay1: usize,
         delay2: usize,
-    ) -> (impl ExactSizeIterator<Item = (S, S, S)> + Clone, usize) {
+    ) -> PaddedIt<impl ChunkIt<(S, S, S)>> {
         assert!(delay1 <= delay2, "Delay1 must be at most delay2.");
 
         let num_kmers = self.len().saturating_sub(context - 1);
@@ -472,7 +468,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
             },
         );
 
-        (it, padding)
+        PaddedIt { it, padding }
     }
 
     // TODO: This is not very optimized.
