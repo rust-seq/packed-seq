@@ -119,7 +119,7 @@ impl Seq<'_> for &[u8] {
     fn par_iter_bp_delayed(
         self,
         context: usize,
-        delay: usize,
+        Delay(delay): Delay,
     ) -> PaddedIt<impl ChunkIt<(u32x8, u32x8)>> {
         assert!(
             delay < usize::MAX / 2,
@@ -192,8 +192,8 @@ impl Seq<'_> for &[u8] {
     fn par_iter_bp_delayed_2(
         self,
         context: usize,
-        delay1: usize,
-        delay2: usize,
+        Delay(delay1): Delay,
+        Delay(delay2): Delay,
     ) -> PaddedIt<impl ChunkIt<(u32x8, u32x8, u32x8)>> {
         assert!(delay1 <= delay2, "Delay1 must be at most delay2.");
 

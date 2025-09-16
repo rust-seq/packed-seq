@@ -387,7 +387,11 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
     /// NOTE: When `self` starts does not start at a byte boundary, the
     /// 'delayed' character is not guaranteed to be `0`.
     #[inline(always)]
-    fn par_iter_bp_delayed(self, context: usize, delay: usize) -> PaddedIt<impl ChunkIt<(S, S)>> {
+    fn par_iter_bp_delayed(
+        self,
+        context: usize,
+        Delay(delay): Delay,
+    ) -> PaddedIt<impl ChunkIt<(S, S)>> {
         #[cfg(target_endian = "big")]
         panic!("Big endian architectures are not supported.");
 
@@ -485,8 +489,8 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
     fn par_iter_bp_delayed_2(
         self,
         context: usize,
-        delay1: usize,
-        delay2: usize,
+        Delay(delay1): Delay,
+        Delay(delay2): Delay,
     ) -> PaddedIt<impl ChunkIt<(S, S, S)>> {
         #[cfg(target_endian = "big")]
         panic!("Big endian architectures are not supported.");

@@ -363,7 +363,7 @@ fn par_iter_bp() {
 #[test]
 fn par_iter_bp_delayed0() {
     let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
-    let PaddedIt { it, padding } = s.as_slice().par_iter_bp_delayed(1, 0);
+    let PaddedIt { it, padding } = s.as_slice().par_iter_bp_delayed(1, Delay(0));
     let it = it.collect::<Vec<_>>();
     fn f(x: &[u8; 8], y: &[u8; 8]) -> (u32x8, u32x8) {
         let x = x.map(|x| pack_char(x) as u32);
@@ -389,7 +389,7 @@ fn par_iter_bp_delayed0() {
 #[test]
 fn par_iter_bp_delayed1() {
     let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
-    let PaddedIt { it, padding } = s.as_slice().par_iter_bp_delayed(1, 1);
+    let PaddedIt { it, padding } = s.as_slice().par_iter_bp_delayed(1, Delay(1));
     let it = it.collect::<Vec<_>>();
     fn f(x: &[u8; 8], y: &[u8; 8]) -> (u32x8, u32x8) {
         let x = x.map(|x| pack_char(x) as u32);
@@ -501,9 +501,8 @@ fn par_iter_bp_delayed_fuzz() {
 
         // let context = random_range(1..=512.min(len).max(1));
         let context = 1;
-        let delay = random_range(0..512);
-        eprintln!("LEN {len} CONTEXT {context} DELAY {delay}");
-        let PaddedIt{it, padding} = s.par_iter_bp_delayed(context, delay);
+        let delay = Delay(random_range(0..512));
+        let PaddedIt { it, padding } = s.par_iter_bp_delayed(context, delay);
         eprintln!("padding: {padding}");
         let it = it.collect::<Vec<_>>();
         fn f(x: &[u8; 8], y: &[u8; 8]) -> (u32x8, u32x8) {
@@ -539,10 +538,10 @@ fn par_iter_bp_delayed_fuzz() {
                 f(
                     &from_fn(|j| get(seq.0, i + stride * j)),
                     &from_fn(|j| {
-                        if i < delay {
+                        if i < delay.0 {
                             b'A'
                         } else {
-                            get(seq.0, (i + stride * j).wrapping_sub(delay))
+                            get(seq.0, (i + stride * j).wrapping_sub(delay.0))
                         }
                     }),
                 )
@@ -581,7 +580,8 @@ fn par_iter_bp_delayed2_fuzz() {
         let delay = random_range(0..512);
         let delay2 = random_range(delay..=512);
         eprintln!("LEN {len} CONTEXT {context} DELAY {delay}");
-        let PaddedIt { it, padding } = s.par_iter_bp_delayed_2(context, delay, delay2);
+        let PaddedIt { it, padding } =
+            s.par_iter_bp_delayed_2(context, Delay(delay), Delay(delay2));
         eprintln!("padding: {padding}");
         let it = it.collect::<Vec<_>>();
         fn f(x: &[u8; 8], y: &[u8; 8], z: &[u8; 8]) -> (u32x8, u32x8, u32x8) {
@@ -648,7 +648,7 @@ fn par_iter_bp_delayed2_fuzz() {
 #[test]
 fn par_iter_bp_delayed01() {
     let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
-    let PaddedIt { it, padding } = s.as_slice().par_iter_bp_delayed_2(1, 0, 1);
+    let PaddedIt { it, padding } = s.as_slice().par_iter_bp_delayed_2(1, Delay(0), Delay(1));
     let it = it.collect::<Vec<_>>();
     fn f(x: &[u8; 8], y: &[u8; 8], z: &[u8; 8]) -> (u32x8, u32x8, u32x8) {
         let x = x.map(|x| pack_char(x) as u32);

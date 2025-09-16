@@ -37,6 +37,9 @@ impl<I> PaddedIt<I> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Delay(pub usize);
+
 /// A non-owned slice of characters.
 ///
 /// The represented character values are expected to be in `[0, 2^b)`,
@@ -161,7 +164,7 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     fn par_iter_bp_delayed(
         self,
         context: usize,
-        delay: usize,
+        delay: Delay,
     ) -> PaddedIt<impl ChunkIt<(u32x8, u32x8)>>;
 
     /// Iterate over 8 chunks of the sequence in parallel, returning three characters:
@@ -181,8 +184,8 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     fn par_iter_bp_delayed_2(
         self,
         context: usize,
-        delay1: usize,
-        delay2: usize,
+        delay1: Delay,
+        delay2: Delay,
     ) -> PaddedIt<impl ChunkIt<(u32x8, u32x8, u32x8)>>;
 
     /// Compare and return the LCP of the two sequences.

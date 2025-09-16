@@ -316,7 +316,11 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
     }
 
     #[inline(always)]
-    fn par_iter_bp_delayed(self, context: usize, delay: usize) -> PaddedIt<impl ChunkIt<(S, S)>> {
+    fn par_iter_bp_delayed(
+        self,
+        context: usize,
+        Delay(delay): Delay,
+    ) -> PaddedIt<impl ChunkIt<(S, S)>> {
         assert!(
             delay < usize::MAX / 2,
             "Delay={} should be >=0.",
@@ -391,8 +395,8 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
     fn par_iter_bp_delayed_2(
         self,
         context: usize,
-        delay1: usize,
-        delay2: usize,
+        Delay(delay1): Delay,
+        Delay(delay2): Delay,
     ) -> PaddedIt<impl ChunkIt<(S, S, S)>> {
         assert!(delay1 <= delay2, "Delay1 must be at most delay2.");
 
