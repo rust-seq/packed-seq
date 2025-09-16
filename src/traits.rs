@@ -1,4 +1,5 @@
 use super::u32x8;
+use itertools::Itertools;
 use mem_dbg::{MemDbg, MemSize};
 use std::ops::Range;
 
@@ -10,6 +11,30 @@ impl<T, I: ExactSizeIterator<Item = T>> ChunkIt<T> for I {}
 pub struct PaddedIt<I> {
     pub it: I,
     pub padding: usize,
+}
+
+impl<I> PaddedIt<I> {
+    #[inline(always)]
+    pub fn map<T, T2>(self, f: impl FnMut(T) -> T2) -> PaddedIt<impl ChunkIt<T2>>
+    where
+        I: ChunkIt<T>,
+    {
+        PaddedIt {
+            it: self.it.map(f),
+            padding: self.padding,
+        }
+    }
+
+    #[inline(always)]
+    pub fn dropping<T>(self, drop: usize) -> PaddedIt<impl ChunkIt<T>>
+    where
+        I: ChunkIt<T>,
+    {
+        PaddedIt {
+            it: self.it.dropping(drop),
+            padding: self.padding,
+        }
+    }
 }
 
 /// A non-owned slice of characters.
