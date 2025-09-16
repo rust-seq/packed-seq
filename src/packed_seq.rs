@@ -310,18 +310,18 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
 
         // read u64 at a time?
         let mut byte = 0;
-        let mut it = (0..this.len + this.offset).map(
-            #[inline(always)]
-            move |i| {
-                if i % 4 == 0 {
-                    byte = this.seq[i / 4];
-                }
-                // Shift byte instead of i?
-                (byte >> (2 * (i % 4))) & 0b11
-            },
-        );
-        it.by_ref().take(this.offset).for_each(drop);
-        it
+        (0..this.len + this.offset)
+            .map(
+                #[inline(always)]
+                move |i| {
+                    if i % 4 == 0 {
+                        byte = this.seq[i / 4];
+                    }
+                    // Shift byte instead of i?
+                    (byte >> (2 * (i % 4))) & 0b11
+                },
+            )
+            .advance(this.offset)
     }
 
     #[inline(always)]
@@ -357,29 +357,29 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         } else {
             n + context + o - 1
         };
-        let mut it = (0..par_len).map(
-            #[inline(always)]
-            move |i| {
-                if i % 16 == 0 {
-                    if i % 128 == 0 {
-                        // Read a u256 for each lane containing the next 128 characters.
-                        let data: [u32x8; 8] = from_fn(
-                            #[inline(always)]
-                            |lane| read_slice(this.seq, offsets[lane] + (i / 4)),
-                        );
-                        *buf = transpose(data);
+        let it = (0..par_len)
+            .map(
+                #[inline(always)]
+                move |i| {
+                    if i % 16 == 0 {
+                        if i % 128 == 0 {
+                            // Read a u256 for each lane containing the next 128 characters.
+                            let data: [u32x8; 8] = from_fn(
+                                #[inline(always)]
+                                |lane| read_slice(this.seq, offsets[lane] + (i / 4)),
+                            );
+                            *buf = transpose(data);
+                        }
+                        cur = buf[(i % 128) / 16];
                     }
-                    cur = buf[(i % 128) / 16];
-                }
-                // Extract the last 2 bits of each character.
-                let chars = cur & S::splat(0x03);
-                // Shift remaining characters to the right.
-                cur = cur >> S::splat(2);
-                chars
-            },
-        );
-        // Drop the first few chars.
-        it.by_ref().take(o).for_each(drop);
+                    // Extract the last 2 bits of each character.
+                    let chars = cur & S::splat(0x03);
+                    // Shift remaining characters to the right.
+                    cur = cur >> S::splat(2);
+                    chars
+                },
+            )
+            .advance(o);
 
         PaddedIt { it, padding }
     }
@@ -436,49 +436,50 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         } else {
             n + context + o - 1
         };
-        let mut it = (0..par_len).map(
-            #[inline(always)]
-            move |i| {
-                if i % 16 == 0 {
-                    if i % 128 == 0 {
-                        // Read a u256 for each lane containing the next 128 characters.
-                        let data: [u32x8; 8] = from_fn(
-                            #[inline(always)]
-                            |lane| read_slice(this.seq, offsets[lane] + (i / 4)),
-                        );
-                        unsafe {
-                            *TryInto::<&mut [u32x8; 8]>::try_into(
-                                buf.get_unchecked_mut(write_idx..write_idx + 8),
-                            )
-                            .unwrap_unchecked() = transpose(data);
+        let it = (0..par_len)
+            .map(
+                #[inline(always)]
+                move |i| {
+                    if i % 16 == 0 {
+                        if i % 128 == 0 {
+                            // Read a u256 for each lane containing the next 128 characters.
+                            let data: [u32x8; 8] = from_fn(
+                                #[inline(always)]
+                                |lane| read_slice(this.seq, offsets[lane] + (i / 4)),
+                            );
+                            unsafe {
+                                *TryInto::<&mut [u32x8; 8]>::try_into(
+                                    buf.get_unchecked_mut(write_idx..write_idx + 8),
+                                )
+                                .unwrap_unchecked() = transpose(data);
+                            }
+                            if i == 0 {
+                                // Mask out chars before the offset.
+                                let elem = !((1u32 << (2 * o)) - 1);
+                                let mask = S::splat(elem);
+                                buf[write_idx] &= mask;
+                            }
                         }
-                        if i == 0 {
-                            // Mask out chars before the offset.
-                            let elem = !((1u32 << (2 * o)) - 1);
-                            let mask = S::splat(elem);
-                            buf[write_idx] &= mask;
-                        }
+                        upcoming = buf[write_idx];
+                        write_idx += 1;
+                        write_idx &= buf_mask;
                     }
-                    upcoming = buf[write_idx];
-                    write_idx += 1;
-                    write_idx &= buf_mask;
-                }
-                if i % 16 == delay % 16 {
-                    unsafe { assert_unchecked(read_idx < buf.len()) };
-                    upcoming_d = buf[read_idx];
-                    read_idx += 1;
-                    read_idx &= buf_mask;
-                }
-                // Extract the last 2 bits of each character.
-                let chars = upcoming & S::splat(0x03);
-                let chars_d = upcoming_d & S::splat(0x03);
-                // Shift remaining characters to the right.
-                upcoming = upcoming >> S::splat(2);
-                upcoming_d = upcoming_d >> S::splat(2);
-                (chars, chars_d)
-            },
-        );
-        it.by_ref().take(o).for_each(drop);
+                    if i % 16 == delay % 16 {
+                        unsafe { assert_unchecked(read_idx < buf.len()) };
+                        upcoming_d = buf[read_idx];
+                        read_idx += 1;
+                        read_idx &= buf_mask;
+                    }
+                    // Extract the last 2 bits of each character.
+                    let chars = upcoming & S::splat(0x03);
+                    let chars_d = upcoming_d & S::splat(0x03);
+                    // Shift remaining characters to the right.
+                    upcoming = upcoming >> S::splat(2);
+                    upcoming_d = upcoming_d >> S::splat(2);
+                    (chars, chars_d)
+                },
+            )
+            .advance(o);
 
         PaddedIt { it, padding }
     }
@@ -531,57 +532,58 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         } else {
             n + context + o - 1
         };
-        let mut it = (0..par_len).map(
-            #[inline(always)]
-            move |i| {
-                if i % 16 == 0 {
-                    if i % 128 == 0 {
-                        // Read a u256 for each lane containing the next 128 characters.
-                        let data: [u32x8; 8] = from_fn(
-                            #[inline(always)]
-                            |lane| read_slice(this.seq, offsets[lane] + (i / 4)),
-                        );
-                        unsafe {
-                            *TryInto::<&mut [u32x8; 8]>::try_into(
-                                buf.get_unchecked_mut(write_idx..write_idx + 8),
-                            )
-                            .unwrap_unchecked() = transpose(data);
+        let it = (0..par_len)
+            .map(
+                #[inline(always)]
+                move |i| {
+                    if i % 16 == 0 {
+                        if i % 128 == 0 {
+                            // Read a u256 for each lane containing the next 128 characters.
+                            let data: [u32x8; 8] = from_fn(
+                                #[inline(always)]
+                                |lane| read_slice(this.seq, offsets[lane] + (i / 4)),
+                            );
+                            unsafe {
+                                *TryInto::<&mut [u32x8; 8]>::try_into(
+                                    buf.get_unchecked_mut(write_idx..write_idx + 8),
+                                )
+                                .unwrap_unchecked() = transpose(data);
+                            }
+                            if i == 0 {
+                                // Mask out chars before the offset.
+                                let elem = !((1u32 << (2 * o)) - 1);
+                                let mask = S::splat(elem);
+                                buf[write_idx] &= mask;
+                            }
                         }
-                        if i == 0 {
-                            // Mask out chars before the offset.
-                            let elem = !((1u32 << (2 * o)) - 1);
-                            let mask = S::splat(elem);
-                            buf[write_idx] &= mask;
-                        }
+                        upcoming = buf[write_idx];
+                        write_idx += 1;
+                        write_idx &= buf_mask;
                     }
-                    upcoming = buf[write_idx];
-                    write_idx += 1;
-                    write_idx &= buf_mask;
-                }
-                if i % 16 == delay1 % 16 {
-                    unsafe { assert_unchecked(read_idx1 < buf.len()) };
-                    upcoming_d1 = buf[read_idx1];
-                    read_idx1 += 1;
-                    read_idx1 &= buf_mask;
-                }
-                if i % 16 == delay2 % 16 {
-                    unsafe { assert_unchecked(read_idx2 < buf.len()) };
-                    upcoming_d2 = buf[read_idx2];
-                    read_idx2 += 1;
-                    read_idx2 &= buf_mask;
-                }
-                // Extract the last 2 bits of each character.
-                let chars = upcoming & S::splat(0x03);
-                let chars_d1 = upcoming_d1 & S::splat(0x03);
-                let chars_d2 = upcoming_d2 & S::splat(0x03);
-                // Shift remaining characters to the right.
-                upcoming = upcoming >> S::splat(2);
-                upcoming_d1 = upcoming_d1 >> S::splat(2);
-                upcoming_d2 = upcoming_d2 >> S::splat(2);
-                (chars, chars_d1, chars_d2)
-            },
-        );
-        it.by_ref().take(o).for_each(drop);
+                    if i % 16 == delay1 % 16 {
+                        unsafe { assert_unchecked(read_idx1 < buf.len()) };
+                        upcoming_d1 = buf[read_idx1];
+                        read_idx1 += 1;
+                        read_idx1 &= buf_mask;
+                    }
+                    if i % 16 == delay2 % 16 {
+                        unsafe { assert_unchecked(read_idx2 < buf.len()) };
+                        upcoming_d2 = buf[read_idx2];
+                        read_idx2 += 1;
+                        read_idx2 &= buf_mask;
+                    }
+                    // Extract the last 2 bits of each character.
+                    let chars = upcoming & S::splat(0x03);
+                    let chars_d1 = upcoming_d1 & S::splat(0x03);
+                    let chars_d2 = upcoming_d2 & S::splat(0x03);
+                    // Shift remaining characters to the right.
+                    upcoming = upcoming >> S::splat(2);
+                    upcoming_d1 = upcoming_d1 >> S::splat(2);
+                    upcoming_d2 = upcoming_d2 >> S::splat(2);
+                    (chars, chars_d1, chars_d2)
+                },
+            )
+            .advance(o);
 
         PaddedIt { it, padding }
     }

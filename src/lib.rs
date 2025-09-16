@@ -114,7 +114,7 @@ pub use packed_seq::{
     complement_base, complement_base_simd, complement_char, pack_char, unpack_base,
 };
 pub use packed_seq::{PackedSeq, PackedSeqVec};
-pub use traits::{ChunkIt, Delay, PaddedIt, Seq, SeqVec};
+pub use traits::{Advance, ChunkIt, Delay, PaddedIt, Seq, SeqVec};
 
 // For internal use only.
 use core::array::from_fn;

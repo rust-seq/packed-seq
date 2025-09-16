@@ -1,5 +1,4 @@
 use super::u32x8;
-use itertools::Itertools;
 use mem_dbg::{MemDbg, MemSize};
 use std::ops::Range;
 
@@ -26,14 +25,23 @@ impl<I> PaddedIt<I> {
     }
 
     #[inline(always)]
-    pub fn dropping<T>(self, drop: usize) -> PaddedIt<impl ChunkIt<T>>
+    pub fn advance<T>(mut self, n: usize) -> PaddedIt<impl ChunkIt<T>>
     where
         I: ChunkIt<T>,
     {
-        PaddedIt {
-            it: self.it.dropping(drop),
-            padding: self.padding,
-        }
+        self.it = self.it.advance(n);
+        self
+    }
+}
+
+pub trait Advance {
+    fn advance(self, n: usize) -> Self;
+}
+impl<I: ExactSizeIterator> Advance for I {
+    #[inline(always)]
+    fn advance(mut self, n: usize) -> Self {
+        self.by_ref().take(n).for_each(drop);
+        self
     }
 }
 
