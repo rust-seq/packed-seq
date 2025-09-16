@@ -300,7 +300,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
     }
 
     #[inline(always)]
-    fn iter_bp(self) -> impl ExactSizeIterator<Item = u8> + Clone {
+    fn iter_bp(self) -> impl ExactSizeIterator<Item = u8> {
         assert!(self.len <= self.seq.len() * 4);
 
         let this = self.normalize();

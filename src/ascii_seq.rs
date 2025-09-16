@@ -240,7 +240,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
     ///
     /// NOTE: This is only efficient on x86_64 with `BMI2` support for `pext`.
     #[inline(always)]
-    fn iter_bp(self) -> impl ExactSizeIterator<Item = u8> + Clone {
+    fn iter_bp(self) -> impl ExactSizeIterator<Item = u8> {
         #[cfg(all(target_arch = "x86_64", target_feature = "bmi2"))]
         {
             let mut cache = 0;

@@ -99,7 +99,7 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     }
 
     /// Iterate over the `b`-bit characters of the sequence.
-    fn iter_bp(self) -> impl ExactSizeIterator<Item = u8> + Clone;
+    fn iter_bp(self) -> impl ExactSizeIterator<Item = u8>;
 
     /// Iterate over 8 chunks of `b`-bit characters of the sequence in parallel.
     ///

@@ -71,7 +71,7 @@ impl Seq<'_> for &[u8] {
 
     /// Iter the ASCII characters.
     #[inline(always)]
-    fn iter_bp(self) -> impl ExactSizeIterator<Item = u8> + Clone {
+    fn iter_bp(self) -> impl ExactSizeIterator<Item = u8> {
         self.iter().copied()
     }
 
