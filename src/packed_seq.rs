@@ -4,6 +4,19 @@ use crate::{intrinsics::transpose, padded_it::ChunkIt};
 
 use super::*;
 
+/// Bits per char
+const B: usize = 2;
+/// lowest B bits are 1.
+const CHAR_MASK: u64 = (1<<B) - 1;
+/// Chars per byte
+const C8: usize = 8/B;
+/// Chars per u32
+const C32: usize = 32/B;
+/// Chars per u256
+const C256: usize = 256/B;
+/// Max length of a kmer that can be read as a single u64.
+const K64: usize = (64-8)/B+1;
+
 /// A 2-bit packed non-owned slice of DNA bases.
 #[derive(Copy, Clone, Debug, MemSize, MemDbg)]
 pub struct PackedSeq<'s> {
@@ -115,7 +128,7 @@ const fn revcomp_raw(word: u64) -> u64 {
 /// Compute the reverse complement of a short sequence packed in a `u64`.
 #[inline(always)]
 pub const fn revcomp_u64(word: u64, len: usize) -> u64 {
-    revcomp_raw(word) >> (usize::BITS as usize - 2 * len)
+    revcomp_raw(word) >> (usize::BITS as usize - B * len)
 }
 
 #[inline(always)]
@@ -125,18 +138,18 @@ pub const fn revcomp_u128(word: u128, len: usize) -> u128 {
     let rlow = revcomp_raw(low);
     let rhigh = revcomp_raw(high);
     let out = ((rlow as u128) << 64) | rhigh as u128;
-    out >> (u128::BITS as usize - 2 * len)
+    out >> (u128::BITS as usize - B * len)
 }
 
 impl PackedSeq<'_> {
     /// Shrink `seq` to only just cover the data.
     #[inline(always)]
     pub fn normalize(&self) -> Self {
-        let start = self.offset / 4;
-        let end = (self.offset + self.len).div_ceil(4);
+        let start_byte = self.offset / C8;
+        let end_byte = (self.offset + self.len).div_ceil(C8);
         Self {
-            seq: &self.seq[start..end],
-            offset: self.offset % 4,
+            seq: &self.seq[start_byte..end_byte],
+            offset: self.offset % C8,
             len: self.len,
         }
     }
@@ -148,6 +161,7 @@ impl PackedSeq<'_> {
     }
 }
 
+/// Read up to 32 bytes starting at idx.
 #[inline(always)]
 pub(crate) fn read_slice(seq: &[u8], idx: usize) -> u32x8 {
     // assert!(idx <= seq.len());
@@ -161,8 +175,8 @@ pub(crate) fn read_slice(seq: &[u8], idx: usize) -> u32x8 {
 }
 
 impl<'s> Seq<'s> for PackedSeq<'s> {
-    const BASES_PER_BYTE: usize = 4;
-    const BITS_PER_CHAR: usize = 2;
+    const BITS_PER_CHAR: usize = B;
+    const BASES_PER_BYTE: usize = C8;
     type SeqVec = PackedSeqVec;
 
     #[inline(always)]
@@ -176,14 +190,6 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
     }
 
     #[inline(always)]
-    fn get(&self, index: usize) -> u8 {
-        let offset = self.offset + index;
-        let idx = offset / 4;
-        let offset = offset % 4;
-        (self.seq[idx] >> (2 * offset)) & 3
-    }
-
-    #[inline(always)]
     fn get_ascii(&self, index: usize) -> u8 {
         unpack_base(self.get(index))
     }
@@ -192,38 +198,20 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
     /// Panics if `self` is longer than 32 characters.
     #[inline(always)]
     fn as_u64(&self) -> u64 {
-        assert!(self.len() <= 32);
+        assert!(self.len() <= 64/B);
         debug_assert!(self.seq.len() <= 9);
 
-        let mask = u64::MAX >> (64 - 2 * self.len());
+        let mask = u64::MAX >> (64 - B * self.len());
 
         // The unaligned read is OK, because we ensure that the underlying `PackedSeqVec::seq` always
         // has at least 16 bytes (the size of a u128) of padding at the end.
-        if self.len() <= 29 {
+        if self.len() <= K64 {
             let x = unsafe { (self.seq.as_ptr() as *const u64).read_unaligned() };
-            (x >> (2 * self.offset)) & mask
+            (x >> (B * self.offset)) & mask
         } else {
             let x = unsafe { (self.seq.as_ptr() as *const u128).read_unaligned() };
-            (x >> (2 * self.offset)) as u64 & mask
+            (x >> (B * self.offset)) as u64 & mask
         }
-    }
-
-    /// Convert a short sequence (kmer) to a packed representation as `u128`.
-    /// Panics if `self` is longer than 64 characters.
-    #[inline(always)]
-    fn as_u128(&self) -> u128 {
-        assert!(
-            self.len() <= 61,
-            "Sequences >61 long cannot be read with a single unaligned u128 read."
-        );
-        debug_assert!(self.seq.len() <= 17);
-
-        let mask = u128::MAX >> (128 - 2 * self.len());
-
-        // The unaligned read is OK, because we ensure that the underlying `PackedSeqVec::seq` always
-        // has at least 16 bytes (the size of a u128) of padding at the end.
-        let x = unsafe { (self.seq.as_ptr() as *const u128).read_unaligned() };
-        (x >> (2 * self.offset)) & mask
     }
 
     /// Convert a short sequence (kmer) to a packed representation of its reverse complement as `usize`.
@@ -231,6 +219,24 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
     #[inline(always)]
     fn revcomp_as_u64(&self) -> u64 {
         revcomp_u64(self.as_u64(), self.len())
+    }
+
+    /// Convert a short sequence (kmer) to a packed representation as `u128`.
+    /// Panics if `self` is longer than 64 characters.
+    #[inline(always)]
+    fn as_u128(&self) -> u128 {
+        assert!(
+            self.len() <= (128-8)/B+1,
+            "Sequences >61 long cannot be read with a single unaligned u128 read."
+        );
+        debug_assert!(self.seq.len() <= 17);
+
+        let mask = u128::MAX >> (128 - B * self.len());
+
+        // The unaligned read is OK, because we ensure that the underlying `PackedSeqVec::seq` always
+        // has at least 16 bytes (the size of a u128) of padding at the end.
+        let x = unsafe { (self.seq.as_ptr() as *const u128).read_unaligned() };
+        (x >> (B * self.offset)) & mask
     }
 
     /// Convert a short sequence (kmer) to a packed representation of its reverse complement as `usize`.
@@ -302,9 +308,10 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         .normalize()
     }
 
+
     #[inline(always)]
     fn iter_bp(self) -> impl ExactSizeIterator<Item = u8> {
-        assert!(self.len <= self.seq.len() * 4);
+        assert!(self.len <= self.seq.len() * C8);
 
         let this = self.normalize();
 
@@ -314,11 +321,11 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
             .map(
                 #[inline(always)]
                 move |i| {
-                    if i % 4 == 0 {
-                        byte = this.seq[i / 4];
+                    if i % C8 == 0 {
+                        byte = this.seq[i / C8];
                     }
                     // Shift byte instead of i?
-                    (byte >> (2 * (i % 4))) & 0b11
+                    (byte >> (B * (i % C8))) & CHAR_MASK as u8
                 },
             )
             .advance(this.offset)
@@ -331,7 +338,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
 
         let this = self.normalize();
         let o = this.offset;
-        assert!(o < 4);
+        assert!(o < C8);
 
         let num_kmers = if this.len == 0 {
             0
@@ -340,9 +347,9 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         };
         // without +o, since we don't need them in the stride.
         let num_kmers_stride = this.len.saturating_sub(context - 1);
-        let n = num_kmers_stride.div_ceil(L).next_multiple_of(4);
-        let bytes_per_chunk = n / 4;
-        let padding = 4 * L * bytes_per_chunk - num_kmers_stride;
+        let n = num_kmers_stride.div_ceil(L).next_multiple_of(C8);
+        let bytes_per_chunk = n / C8;
+        let padding = C8 * L * bytes_per_chunk - num_kmers_stride;
 
         let offsets: [usize; 8] = from_fn(|l| l * bytes_per_chunk);
         let mut cur = S::ZERO;
@@ -361,21 +368,21 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
             .map(
                 #[inline(always)]
                 move |i| {
-                    if i % 16 == 0 {
-                        if i % 128 == 0 {
+                    if i % C32 == 0 {
+                        if i % C256 == 0 {
                             // Read a u256 for each lane containing the next 128 characters.
                             let data: [u32x8; 8] = from_fn(
                                 #[inline(always)]
-                                |lane| read_slice(this.seq, offsets[lane] + (i / 4)),
+                                |lane| read_slice(this.seq, offsets[lane] + (i / C8)),
                             );
                             *buf = transpose(data);
                         }
-                        cur = buf[(i % 128) / 16];
+                        cur = buf[(i % C256) / C32];
                     }
                     // Extract the last 2 bits of each character.
-                    let chars = cur & S::splat(0x03);
+                    let chars = cur & S::splat(CHAR_MASK as u32);
                     // Shift remaining characters to the right.
-                    cur = cur >> S::splat(2);
+                    cur = cur >> S::splat(B as u32);
                     chars
                 },
             )
@@ -403,7 +410,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
 
         let this = self.normalize();
         let o = this.offset;
-        assert!(o < 4);
+        assert!(o < C8);
 
         let num_kmers = if this.len == 0 {
             0
@@ -412,9 +419,9 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         };
         // without +o, since we don't need them in the stride.
         let num_kmers_stride = this.len.saturating_sub(context - 1);
-        let n = num_kmers_stride.div_ceil(L).next_multiple_of(4);
-        let bytes_per_chunk = n / 4;
-        let padding = 4 * L * bytes_per_chunk - num_kmers_stride;
+        let n = num_kmers_stride.div_ceil(L).next_multiple_of(C8);
+        let bytes_per_chunk = n / C8;
+        let padding = C8 * L * bytes_per_chunk - num_kmers_stride;
 
         let offsets: [usize; 8] = from_fn(|l| l * bytes_per_chunk);
         let mut upcoming = S::ZERO;
@@ -423,13 +430,14 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         // Even buf_len is nice to only have the write==buf_len check once.
         // We also make it the next power of 2, for faster modulo operations.
         // delay/16: number of bp in a u32.
-        let buf_len = (delay / 16 + 8).next_power_of_two();
+        // +8: some 'random' padding
+        let buf_len = (delay / C32 + 8).next_power_of_two();
         let buf_mask = buf_len - 1;
         let mut buf = vec![S::ZERO; buf_len];
         let mut write_idx = 0;
         // We compensate for the first delay/16 triggers of the check below that
         // happen before the delay is actually reached.
-        let mut read_idx = (buf_len - delay / 16) % buf_len;
+        let mut read_idx = (buf_len - delay / C32) % buf_len;
 
         let par_len = if num_kmers == 0 {
             0
@@ -440,12 +448,12 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
             .map(
                 #[inline(always)]
                 move |i| {
-                    if i % 16 == 0 {
-                        if i % 128 == 0 {
+                    if i % C32 == 0 {
+                        if i % C256 == 0 {
                             // Read a u256 for each lane containing the next 128 characters.
                             let data: [u32x8; 8] = from_fn(
                                 #[inline(always)]
-                                |lane| read_slice(this.seq, offsets[lane] + (i / 4)),
+                                |lane| read_slice(this.seq, offsets[lane] + (i / C8)),
                             );
                             unsafe {
                                 *TryInto::<&mut [u32x8; 8]>::try_into(
@@ -455,7 +463,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                             }
                             if i == 0 {
                                 // Mask out chars before the offset.
-                                let elem = !((1u32 << (2 * o)) - 1);
+                                let elem = !((1u32 << (B * o)) - 1);
                                 let mask = S::splat(elem);
                                 buf[write_idx] &= mask;
                             }
@@ -464,18 +472,18 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                         write_idx += 1;
                         write_idx &= buf_mask;
                     }
-                    if i % 16 == delay % 16 {
+                    if i % C32 == delay % C32 {
                         unsafe { assert_unchecked(read_idx < buf.len()) };
                         upcoming_d = buf[read_idx];
                         read_idx += 1;
                         read_idx &= buf_mask;
                     }
                     // Extract the last 2 bits of each character.
-                    let chars = upcoming & S::splat(0x03);
-                    let chars_d = upcoming_d & S::splat(0x03);
+                    let chars = upcoming & S::splat(CHAR_MASK as u32);
+                    let chars_d = upcoming_d & S::splat(CHAR_MASK as u32);
                     // Shift remaining characters to the right.
-                    upcoming = upcoming >> S::splat(2);
-                    upcoming_d = upcoming_d >> S::splat(2);
+                    upcoming = upcoming >> S::splat(B as u32);
+                    upcoming_d = upcoming_d >> S::splat(B as u32);
                     (chars, chars_d)
                 },
             )
@@ -498,7 +506,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
 
         let this = self.normalize();
         let o = this.offset;
-        assert!(o < 4);
+        assert!(o < C8);
         assert!(delay1 <= delay2, "Delay1 must be at most delay2.");
 
         let num_kmers = if this.len == 0 {
@@ -508,9 +516,9 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         };
         // without +o, since we don't need them in the stride.
         let num_kmers_stride = this.len.saturating_sub(context - 1);
-        let n = num_kmers_stride.div_ceil(L).next_multiple_of(4);
-        let bytes_per_chunk = n / 4;
-        let padding = 4 * L * bytes_per_chunk - num_kmers_stride;
+        let n = num_kmers_stride.div_ceil(L).next_multiple_of(C8);
+        let bytes_per_chunk = n / C8;
+        let padding = C8 * L * bytes_per_chunk - num_kmers_stride;
 
         let offsets: [usize; 8] = from_fn(|l| l * bytes_per_chunk);
         let mut upcoming = S::ZERO;
@@ -518,14 +526,14 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
         let mut upcoming_d2 = S::ZERO;
 
         // Even buf_len is nice to only have the write==buf_len check once.
-        let buf_len = (delay2 / 16 + 8).next_power_of_two();
+        let buf_len = (delay2 / C32 + 8).next_power_of_two();
         let buf_mask = buf_len - 1;
         let mut buf = vec![S::ZERO; buf_len];
         let mut write_idx = 0;
         // We compensate for the first delay/16 triggers of the check below that
         // happen before the delay is actually reached.
-        let mut read_idx1 = (buf_len - delay1 / 16) % buf_len;
-        let mut read_idx2 = (buf_len - delay2 / 16) % buf_len;
+        let mut read_idx1 = (buf_len - delay1 / C32) % buf_len;
+        let mut read_idx2 = (buf_len - delay2 / C32) % buf_len;
 
         let par_len = if num_kmers == 0 {
             0
@@ -536,12 +544,12 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
             .map(
                 #[inline(always)]
                 move |i| {
-                    if i % 16 == 0 {
-                        if i % 128 == 0 {
+                    if i % C32 == 0 {
+                        if i % C256 == 0 {
                             // Read a u256 for each lane containing the next 128 characters.
                             let data: [u32x8; 8] = from_fn(
                                 #[inline(always)]
-                                |lane| read_slice(this.seq, offsets[lane] + (i / 4)),
+                                |lane| read_slice(this.seq, offsets[lane] + (i / C8)),
                             );
                             unsafe {
                                 *TryInto::<&mut [u32x8; 8]>::try_into(
@@ -551,7 +559,7 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                             }
                             if i == 0 {
                                 // Mask out chars before the offset.
-                                let elem = !((1u32 << (2 * o)) - 1);
+                                let elem = !((1u32 << (B * o)) - 1);
                                 let mask = S::splat(elem);
                                 buf[write_idx] &= mask;
                             }
@@ -560,26 +568,26 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
                         write_idx += 1;
                         write_idx &= buf_mask;
                     }
-                    if i % 16 == delay1 % 16 {
+                    if i % C32 == delay1 % C32 {
                         unsafe { assert_unchecked(read_idx1 < buf.len()) };
                         upcoming_d1 = buf[read_idx1];
                         read_idx1 += 1;
                         read_idx1 &= buf_mask;
                     }
-                    if i % 16 == delay2 % 16 {
+                    if i % C32 == delay2 % C32 {
                         unsafe { assert_unchecked(read_idx2 < buf.len()) };
                         upcoming_d2 = buf[read_idx2];
                         read_idx2 += 1;
                         read_idx2 &= buf_mask;
                     }
                     // Extract the last 2 bits of each character.
-                    let chars = upcoming & S::splat(0x03);
-                    let chars_d1 = upcoming_d1 & S::splat(0x03);
-                    let chars_d2 = upcoming_d2 & S::splat(0x03);
+                    let chars = upcoming & S::splat(CHAR_MASK as u32);
+                    let chars_d1 = upcoming_d1 & S::splat(CHAR_MASK as u32);
+                    let chars_d2 = upcoming_d2 & S::splat(CHAR_MASK as u32);
                     // Shift remaining characters to the right.
-                    upcoming = upcoming >> S::splat(2);
-                    upcoming_d1 = upcoming_d1 >> S::splat(2);
-                    upcoming_d2 = upcoming_d2 >> S::splat(2);
+                    upcoming = upcoming >> S::splat(B as u32);
+                    upcoming_d1 = upcoming_d1 >> S::splat(B as u32);
+                    upcoming_d2 = upcoming_d2 >> S::splat(B as u32);
                     (chars, chars_d1, chars_d2)
                 },
             )
@@ -592,8 +600,8 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
     fn cmp_lcp(&self, other: &Self) -> (std::cmp::Ordering, usize) {
         let mut lcp = 0;
         let min_len = self.len.min(other.len);
-        for i in (0..min_len).step_by(29) {
-            let len = (min_len - i).min(29);
+        for i in (0..min_len).step_by(K64) {
+            let len = (min_len - i).min(K64);
             let this = self.slice(i..i + len);
             let other = other.slice(i..i + len);
             let this_word = this.as_u64();
@@ -601,14 +609,22 @@ impl<'s> Seq<'s> for PackedSeq<'s> {
             if this_word != other_word {
                 // Unfortunately, bases are packed in little endian order, so the default order is reversed.
                 let eq = this_word ^ other_word;
-                let t = eq.trailing_zeros() / 2 * 2;
-                lcp += t as usize / 2;
-                let mask = 0b11 << t;
+                let t = eq.trailing_zeros() as usize / B * B;
+                lcp += t / B;
+                let mask = CHAR_MASK << t;
                 return ((this_word & mask).cmp(&(other_word & mask)), lcp);
             }
             lcp += len;
         }
         (self.len.cmp(&other.len), lcp)
+    }
+
+    #[inline(always)]
+    fn get(&self, index: usize) -> u8 {
+        let offset = self.offset + index;
+        let idx = offset / C8;
+        let offset = offset % C8;
+        (self.seq[idx] >> (B * offset)) & CHAR_MASK as u8
     }
 }
 
@@ -618,8 +634,8 @@ impl PartialEq for PackedSeq<'_> {
         if self.len != other.len {
             return false;
         }
-        for i in (0..self.len).step_by(29) {
-            let len = (self.len - i).min(29);
+        for i in (0..self.len).step_by(K64) {
+            let len = (self.len - i).min(K64);
             let this = self.slice(i..i + len);
             let that = other.slice(i..i + len);
             if this.as_u64() != that.as_u64() {
@@ -642,8 +658,8 @@ impl Ord for PackedSeq<'_> {
     /// Compares 29 characters at a time.
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         let min_len = self.len.min(other.len);
-        for i in (0..min_len).step_by(29) {
-            let len = (min_len - i).min(29);
+        for i in (0..min_len).step_by(K64) {
+            let len = (min_len - i).min(K64);
             let this = self.slice(i..i + len);
             let other = other.slice(i..i + len);
             let this_word = this.as_u64();
@@ -651,8 +667,8 @@ impl Ord for PackedSeq<'_> {
             if this_word != other_word {
                 // Unfortunately, bases are packed in little endian order, so the default order is reversed.
                 let eq = this_word ^ other_word;
-                let t = eq.trailing_zeros() / 2 * 2;
-                let mask = 0b11 << t;
+                let t = eq.trailing_zeros() as usize / B * B;
+                let mask = CHAR_MASK << t;
                 return (this_word & mask).cmp(&(other_word & mask));
             }
         }
@@ -665,14 +681,14 @@ impl SeqVec for PackedSeqVec {
 
     #[inline(always)]
     fn into_raw(mut self) -> Vec<u8> {
-        self.seq.resize(self.len.div_ceil(4), 0);
+        self.seq.resize(self.len.div_ceil(C8), 0);
         self.seq
     }
 
     #[inline(always)]
     fn as_slice(&self) -> Self::Seq<'_> {
         PackedSeq {
-            seq: &self.seq[..self.len.div_ceil(4)],
+            seq: &self.seq[..self.len.div_ceil(C8)],
             offset: 0,
             len: self.len,
         }
@@ -695,12 +711,12 @@ impl SeqVec for PackedSeqVec {
     }
 
     fn push_seq<'a>(&mut self, seq: PackedSeq<'_>) -> Range<usize> {
-        let start = self.len.next_multiple_of(4) + seq.offset;
+        let start = self.len.next_multiple_of(C8) + seq.offset;
         let end = start + seq.len();
         // Reserve *additional* capacity.
         self.seq.reserve(seq.seq.len());
         // Shrink away the padding.
-        self.seq.resize(self.len.div_ceil(4), 0);
+        self.seq.resize(self.len.div_ceil(C8), 0);
         // Extend.
         self.seq.extend(seq.seq);
         // Push padding.
@@ -709,6 +725,7 @@ impl SeqVec for PackedSeqVec {
         start..end
     }
 
+    // FIXME
     /// Push an ASCII sequence to an `PackedSeqVec`.
     /// `Aa` map to `0`, `Cc` to `1`, `Gg` to `3`, and `Tt` to `2`.
     /// Other characters are silently mapped into `0..4`.
@@ -722,17 +739,17 @@ impl SeqVec for PackedSeqVec {
     /// - filter out non-`ACGT`.
     fn push_ascii(&mut self, seq: &[u8]) -> Range<usize> {
         self.seq
-            .resize((self.len + seq.len()).div_ceil(4) + PADDING, 0);
-        let start_aligned = self.len.next_multiple_of(4);
+            .resize((self.len + seq.len()).div_ceil(C8) + PADDING, 0);
+        let start_aligned = self.len.next_multiple_of(C8);
         let start = self.len;
         let len = seq.len();
-        let mut idx = self.len / 4;
+        let mut idx = self.len / C8;
 
         let unaligned = core::cmp::min(start_aligned - start, len);
         if unaligned > 0 {
             let mut packed_byte = self.seq[idx];
             for &base in &seq[..unaligned] {
-                packed_byte |= pack_char_lossy(base) << ((self.len % 4) * 2);
+                packed_byte |= pack_char_lossy(base) << ((self.len % C8) * B);
                 self.len += 1;
             }
             self.seq[idx] = packed_byte;
@@ -777,7 +794,7 @@ impl SeqVec for PackedSeqVec {
                     let half_packed = vpadd_u8(bits_0, bits_1);
                     let packed = vpadd_u8(half_packed, vdup_n_u8(0));
                     vst1_u8(self.seq.as_mut_ptr().add(idx), packed);
-                    idx += 4;
+                    idx += C8;
                     self.len += 16;
                 }
             }
@@ -785,15 +802,15 @@ impl SeqVec for PackedSeqVec {
 
         let mut packed_byte = 0;
         for &base in &seq[last..] {
-            packed_byte |= pack_char_lossy(base) << ((self.len % 4) * 2);
+            packed_byte |= pack_char_lossy(base) << ((self.len % C8) * B);
             self.len += 1;
-            if self.len % 4 == 0 {
+            if self.len % C8 == 0 {
                 self.seq[idx] = packed_byte;
                 idx += 1;
                 packed_byte = 0;
             }
         }
-        if self.len % 4 != 0 && last < len {
+        if self.len % C8 != 0 && last < len {
             self.seq[idx] = packed_byte;
             idx += 1;
         }
@@ -805,12 +822,12 @@ impl SeqVec for PackedSeqVec {
     fn random(n: usize) -> Self {
         use rand::{RngCore, SeedableRng};
 
-        let byte_len = n.div_ceil(4);
+        let byte_len = n.div_ceil(C8);
         let mut seq = vec![0; byte_len + PADDING];
         rand::rngs::SmallRng::from_os_rng().fill_bytes(&mut seq[..byte_len]);
         // Ensure that the last byte is padded with zeros.
-        if n % 4 != 0 {
-            seq[byte_len - 1] &= (1 << (2 * (n % 4))) - 1;
+        if n % C8 != 0 {
+            seq[byte_len - 1] &= (1 << (B * (n % C8))) - 1;
         }
 
         Self { seq, len: n }

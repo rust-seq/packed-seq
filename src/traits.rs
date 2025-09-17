@@ -19,10 +19,10 @@ pub struct Delay(pub usize);
 /// Each character is assumed to fit in 8 bits. Some functions take or return
 /// this 'unpacked' (ASCII) character.
 pub trait Seq<'s>: Copy + Eq + Ord {
-    /// Number of encoded characters per byte of memory of the `Seq`.
-    const BASES_PER_BYTE: usize;
     /// Number of bits `b` to represent each character returned by `iter_bp` and variants..
     const BITS_PER_CHAR: usize;
+    /// Number of encoded characters per byte of memory of the `Seq`.
+    const BASES_PER_BYTE: usize;
 
     /// The corresponding owned sequence type.
     type SeqVec: SeqVec;
