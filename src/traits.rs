@@ -1,6 +1,12 @@
+use crate::{ChunkIt, PaddedIt};
+
 use super::u32x8;
 use mem_dbg::{MemDbg, MemSize};
 use std::ops::Range;
+
+/// Strong type indicating the delay passed to [`Seq::par_iter_bp_delayed`] and [`Seq::par_iter_bp_delayed_2`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Delay(pub usize);
 
 /// A non-owned slice of characters.
 ///
@@ -99,7 +105,7 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     }
 
     /// Iterate over the `b`-bit characters of the sequence.
-    fn iter_bp(self) -> impl ExactSizeIterator<Item = u8> + Clone;
+    fn iter_bp(self) -> impl ExactSizeIterator<Item = u8>;
 
     /// Iterate over 8 chunks of `b`-bit characters of the sequence in parallel.
     ///
@@ -110,7 +116,7 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     /// When `context>1`, consecutive chunks overlap by `context-1` bases.
     ///
     /// Expected to be implemented using SIMD instructions.
-    fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = u32x8> + Clone, usize);
+    fn par_iter_bp(self, context: usize) -> PaddedIt<impl ChunkIt<u32x8>>;
 
     /// Iterate over 8 chunks of the sequence in parallel, returning two characters offset by `delay` positions.
     ///
@@ -126,8 +132,8 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     fn par_iter_bp_delayed(
         self,
         context: usize,
-        delay: usize,
-    ) -> (impl ExactSizeIterator<Item = (u32x8, u32x8)> + Clone, usize);
+        delay: Delay,
+    ) -> PaddedIt<impl ChunkIt<(u32x8, u32x8)>>;
 
     /// Iterate over 8 chunks of the sequence in parallel, returning three characters:
     /// the char added, the one `delay` positions before, and the one `delay2` positions before.
@@ -146,12 +152,9 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     fn par_iter_bp_delayed_2(
         self,
         context: usize,
-        delay1: usize,
-        delay2: usize,
-    ) -> (
-        impl ExactSizeIterator<Item = (u32x8, u32x8, u32x8)> + Clone,
-        usize,
-    );
+        delay1: Delay,
+        delay2: Delay,
+    ) -> PaddedIt<impl ChunkIt<(u32x8, u32x8, u32x8)>>;
 
     /// Compare and return the LCP of the two sequences.
     fn cmp_lcp(&self, other: &Self) -> (std::cmp::Ordering, usize);

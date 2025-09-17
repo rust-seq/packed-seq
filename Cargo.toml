@@ -26,3 +26,6 @@ pyo3 = { version = "0.25", features = ["extension-module"], optional = true }
 [features]
 # Also needed for tests.
 default = ["rand"]
+
+# Hides the `simd` warnings when neither AVX2 nor NEON is detected.
+scalar = []

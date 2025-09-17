@@ -3,7 +3,7 @@
 use wide::u32x4;
 use wide::u32x8 as S;
 
-/// Transpose a matrix of 8 SIMD vectors.
+/// Transpose an 8x8 matrix of 8 `u32x8` SIMD elements.
 /// <https://stackoverflow.com/questions/25622745/transpose-an-8x8-float-using-avx-avx2>
 // TODO: Investigate other transpose functions mentioned there?
 pub fn transpose(m: [S; 8]) -> [S; 8] {

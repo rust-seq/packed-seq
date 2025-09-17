@@ -1,5 +1,11 @@
 # Changelog
 
+## 4.0.0
+- **Breaking**: Make `delay` passed into `par_iter_bp_delayed` a strong type `Delay(pub usize)` to
+  reduce potential for bugs.
+- **Breaking**: Encapsulate parallel iterators in new `PaddedIt { it, padding: usize }` type with `.map`, `.advance`, and `.collect_into` functions.
+- Make `intrinsics::transpose` public for use in `collect_and_dedup` in `simd_minimizers`.
+
 ## 3.2.1
 - Add `Seq::read_{revcomp}_kmer_u128` with more tests
 - Fix bug in `revcomp_u128`

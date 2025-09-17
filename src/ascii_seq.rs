@@ -1,4 +1,4 @@
-use crate::{intrinsics::transpose, packed_seq::read_slice};
+use crate::{intrinsics::transpose, packed_seq::read_slice, padded_it::ChunkIt};
 
 use super::*;
 
@@ -240,7 +240,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
     ///
     /// NOTE: This is only efficient on x86_64 with `BMI2` support for `pext`.
     #[inline(always)]
-    fn iter_bp(self) -> impl ExactSizeIterator<Item = u8> + Clone {
+    fn iter_bp(self) -> impl ExactSizeIterator<Item = u8> {
         #[cfg(all(target_arch = "x86_64", target_feature = "bmi2"))]
         {
             let mut cache = 0;
@@ -274,7 +274,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
 
     /// Iterate the basepairs in the sequence in 8 parallel streams, assuming values in `0..4`.
     #[inline(always)]
-    fn par_iter_bp(self, context: usize) -> (impl ExactSizeIterator<Item = S> + Clone, usize) {
+    fn par_iter_bp(self, context: usize) -> PaddedIt<impl ChunkIt<S>> {
         let num_kmers = self.len().saturating_sub(context - 1);
         let n = num_kmers.div_ceil(L);
         let padding = L * n - num_kmers;
@@ -312,15 +312,15 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
             },
         );
 
-        (it, padding)
+        PaddedIt { it, padding }
     }
 
     #[inline(always)]
     fn par_iter_bp_delayed(
         self,
         context: usize,
-        delay: usize,
-    ) -> (impl ExactSizeIterator<Item = (S, S)> + Clone, usize) {
+        Delay(delay): Delay,
+    ) -> PaddedIt<impl ChunkIt<(S, S)>> {
         assert!(
             delay < usize::MAX / 2,
             "Delay={} should be >=0.",
@@ -388,16 +388,16 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
             },
         );
 
-        (it, padding)
+        PaddedIt { it, padding }
     }
 
     #[inline(always)]
     fn par_iter_bp_delayed_2(
         self,
         context: usize,
-        delay1: usize,
-        delay2: usize,
-    ) -> (impl ExactSizeIterator<Item = (S, S, S)> + Clone, usize) {
+        Delay(delay1): Delay,
+        Delay(delay2): Delay,
+    ) -> PaddedIt<impl ChunkIt<(S, S, S)>> {
         assert!(delay1 <= delay2, "Delay1 must be at most delay2.");
 
         let num_kmers = self.len().saturating_sub(context - 1);
@@ -472,7 +472,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
             },
         );
 
-        (it, padding)
+        PaddedIt { it, padding }
     }
 
     // TODO: This is not very optimized.

@@ -52,6 +52,10 @@
 //! But instead of just returning a single character, they also return a second (and third) character, that is `delay` positions _behind_ the new character (at index `idx - delay`).
 //! This way, k-mers can be enumerated by setting `delay=k` and then mapping e.g. `|(add, remove)| kmer = (kmer<<2) ^ add ^ (remove << (2*k))`.
 //!
+//! #### Collect
+//!
+//! Use [`PaddedIt::collect`] and [`PaddedIt::collect_into`] to collect the values returned by a parallel iterator over `u32x8` into a flat `Vec<u32>`.
+//!
 //! ## Example
 //!
 //! ```
@@ -78,19 +82,42 @@
 //! // Iterate over 8 chunks at the same time.
 //! let seq = b"AAAACCTTGGTTACTG"; // plain ASCII sequence
 //! // chunks:  ^ ^ ^ ^ ^ ^ ^ ^
-//! let (par_iter, padding) = seq.as_slice().par_iter_bp(1);
-//! let mut par_iter_u8 = par_iter.map(|x| x.as_array_ref().map(|c| c as u8));
+//! // the `1` argument indicates a 'context' length of 1,
+//! // since we're just iterating single characters.
+//! let par_iter = seq.as_slice().par_iter_bp(1);
+//! let mut par_iter_u8 = par_iter.it.map(|x| x.as_array_ref().map(|c| c as u8));
 //! assert_eq!(par_iter_u8.next(), Some(*b"AACTGTAT"));
 //! assert_eq!(par_iter_u8.next(), Some(*b"AACTGTCG"));
 //! assert_eq!(par_iter_u8.next(), None);
+//!
+//! let bases: Vec<u32> = seq.as_slice().par_iter_bp(1).collect();
+//! let bases: Vec<u8> = bases.into_iter().map(|x| x as u8).collect();
+//! assert_eq!(bases, seq);
+//!
+//! // With context=3, the chunks overlap by 2 characters,
+//! // which can be skipped using `advance`.
+//! let bases: Vec<u32> = seq.as_slice().par_iter_bp(3).advance(2).collect();
+//! let bases: Vec<u8> = bases.into_iter().map(|x| x as u8).collect();
+//! assert_eq!(bases, &seq[2..]);
 //! ```
 //!
 //! ## Feature flags
 //! - `epserde` enables `derive(epserde::Epserde)` for `PackedSeqVec` and `AsciiSeqVec`, and adds its `SerializeInner` and `DeserializeInner` traits to `SeqVec`.
 //! - `pyo3` enables `derive(pyo3::pyclass)` for `PackedSeqVec` and `AsciiSeqVec`.
 
+#[cfg(not(any(
+    doc,
+    debug_assertions,
+    target_feature = "avx2",
+    target_feature = "neon",
+    feature = "scalar"
+)))]
+compile_error!(
+    "Packed-seq uses AVX2 or NEON SIMD instructions. Compile using `-C target-cpu=native` to get the expected performance. Silence this error using the `scalar` feature."
+);
+
 /// Functions with architecture-specific implementations.
-mod intrinsics {
+pub mod intrinsics {
     mod transpose;
     pub use transpose::transpose;
 }
@@ -100,6 +127,7 @@ mod traits;
 mod ascii;
 mod ascii_seq;
 mod packed_seq;
+mod padded_it;
 
 #[cfg(test)]
 mod test;
@@ -114,7 +142,8 @@ pub use packed_seq::{
     complement_base, complement_base_simd, complement_char, pack_char, unpack_base,
 };
 pub use packed_seq::{PackedSeq, PackedSeqVec};
-pub use traits::{Seq, SeqVec};
+pub use padded_it::{Advance, ChunkIt, PaddedIt};
+pub use traits::{Delay, Seq, SeqVec};
 
 // For internal use only.
 use core::array::from_fn;
