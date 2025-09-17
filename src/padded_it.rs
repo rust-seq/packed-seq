@@ -1,22 +1,27 @@
-//! FIXME Collect SIMD-iterator values into a flat `Vec<u32>`.
-
-/// Trait alias for iterators over multiple chunks in parallel, typically over `u32x8`.
-pub trait ChunkIt<T>: ExactSizeIterator<Item = T> {}
-impl<T, I: ExactSizeIterator<Item = T>> ChunkIt<T> for I {}
 use crate::intrinsics::transpose;
 use std::mem::transmute;
 use wide::u32x8;
 
-/// An iterator over multiple lanes, with a given amount of padding at the end of the last lane(s).
+/// Trait alias for iterators over multiple chunks in parallel, typically over `u32x8`.
+pub trait ChunkIt<T>: ExactSizeIterator<Item = T> {}
+impl<T, I: ExactSizeIterator<Item = T>> ChunkIt<T> for I {}
+
+/// An iterator over values in multiple SIMD lanes, with a certain amount of `padding` at the end.
+///
+/// This type is returned by functions like [`crate::Seq::par_iter_bp`].
+/// It usally contains an iterator over e.g. `u32x8` values or `(u32x8, u32x8)` tuples,
 pub struct PaddedIt<I> {
     pub it: I,
     pub padding: usize,
 }
 
+/// Extension trait to advance an iterator by `n` steps.
+/// Used to skip e.g. the first `k-1` values of an iterator over k-mer hasher.
 pub trait Advance {
     fn advance(self, n: usize) -> Self;
 }
 impl<I: ExactSizeIterator> Advance for I {
+    /// Advance the iterator by `n` steps, consuming the first `n` values.
     #[inline(always)]
     fn advance(mut self, n: usize) -> Self {
         self.by_ref().take(n).for_each(drop);
@@ -25,6 +30,7 @@ impl<I: ExactSizeIterator> Advance for I {
 }
 
 impl<I> PaddedIt<I> {
+    /// Apply `f` to each element.
     #[inline(always)]
     pub fn map<T, T2>(self, f: impl FnMut(T) -> T2) -> PaddedIt<impl ChunkIt<T2>>
     where
@@ -36,6 +42,7 @@ impl<I> PaddedIt<I> {
         }
     }
 
+    /// Advance the iterator by `n` steps, consuming the first `n` values (of each lane).
     #[inline(always)]
     pub fn advance<T>(mut self, n: usize) -> PaddedIt<impl ChunkIt<T>>
     where
@@ -47,15 +54,17 @@ impl<I> PaddedIt<I> {
 }
 
 impl<I: ChunkIt<u32x8>> PaddedIt<I> {
-    /// Convenience wrapper around `collect_into`.
+    /// Collect all values of a padded `u32x8`-iterator into a flat vector.
+    /// Prefer `collect_into` to avoid repeated allocations.
     pub fn collect(self) -> Vec<u32> {
         let mut v = vec![];
         self.collect_into(&mut v);
         v
     }
 
-    /// Collect a SIMD-iterator into a single flat vector.
-    /// Works by taking 8 elements from each stream, and transposing this SIMD-matrix before writing out the results.
+    /// Collect all values of a padded `u32x8`-iterator into a flat vector.
+    ///
+    /// Implemented by taking 8 elements from each stream, and transposing this SIMD-matrix before writing out the results.
     /// The `tail` is appended at the end.
     #[inline(always)]
     pub fn collect_into(self, out_vec: &mut Vec<u32>) {

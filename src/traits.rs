@@ -4,6 +4,7 @@ use super::u32x8;
 use mem_dbg::{MemDbg, MemSize};
 use std::ops::Range;
 
+/// Strong type indicating the delay passed to [`Seq::par_iter_bp_delayed`] and [`Seq::par_iter_bp_delayed_2`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Delay(pub usize);
 
