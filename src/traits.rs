@@ -168,12 +168,14 @@ cfg_if::cfg_if! {
         pub trait SerializeInner {}
         pub trait DeserializeInner {}
 
+        use crate::packed_seq::{Bits, SupportedBits, PackedSeqVecBase};
+
         impl SerializeInner for Vec<u8> {}
         impl DeserializeInner for Vec<u8> {}
         impl SerializeInner for crate::AsciiSeqVec {}
         impl DeserializeInner for crate::AsciiSeqVec {}
-        impl SerializeInner for crate::PackedSeqVec {}
-        impl DeserializeInner for crate::PackedSeqVec {}
+        impl<const B: usize> SerializeInner for PackedSeqVecBase<B> where Bits<B>:SupportedBits {}
+        impl<const B: usize> DeserializeInner for PackedSeqVecBase<B> where Bits<B>:SupportedBits {}
     }
 }
 
