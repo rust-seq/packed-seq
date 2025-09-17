@@ -26,8 +26,12 @@ crate was developed:
 This library supports AVX2 and NEON instruction sets.
 Make sure to set `RUSTFLAGS="-C target-cpu=native"` when compiling to use the instruction sets available on your architecture.
 
-    RUSTFLAGS="-C target-cpu=native" cargo run --release
+``` sh
+RUSTFLAGS="-C target-cpu=native" cargo run --release
+```
 
+Enable the `-F scalar` feature flag to fall back to a scalar implementation with
+reduced performance.
 
 ## Usage example
 

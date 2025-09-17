@@ -105,6 +105,17 @@
 //! - `epserde` enables `derive(epserde::Epserde)` for `PackedSeqVec` and `AsciiSeqVec`, and adds its `SerializeInner` and `DeserializeInner` traits to `SeqVec`.
 //! - `pyo3` enables `derive(pyo3::pyclass)` for `PackedSeqVec` and `AsciiSeqVec`.
 
+#[cfg(not(any(
+    doc,
+    debug_assertions,
+    target_feature = "avx2",
+    target_feature = "neon",
+    feature = "scalar"
+)))]
+compile_error!(
+    "Packed-seq uses AVX2 or NEON SIMD instructions. Compile using `-C target-cpu=native` to get the expected performance. Silence this error using the `scalar` feature."
+);
+
 /// Functions with architecture-specific implementations.
 pub mod intrinsics {
     mod transpose;
