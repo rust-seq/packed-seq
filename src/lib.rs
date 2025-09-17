@@ -100,6 +100,7 @@ mod traits;
 mod ascii;
 mod ascii_seq;
 mod packed_seq;
+mod padded_it;
 
 #[cfg(test)]
 mod test;
@@ -114,7 +115,8 @@ pub use packed_seq::{
     complement_base, complement_base_simd, complement_char, pack_char, unpack_base,
 };
 pub use packed_seq::{PackedSeq, PackedSeqVec};
-pub use traits::{Advance, ChunkIt, Delay, PaddedIt, Seq, SeqVec};
+pub use padded_it::{Advance, ChunkIt, PaddedIt};
+pub use traits::{Delay, Seq, SeqVec};
 
 // For internal use only.
 use core::array::from_fn;

@@ -1,4 +1,4 @@
-use crate::{intrinsics::transpose, packed_seq::read_slice, traits::ChunkIt};
+use crate::{intrinsics::transpose, packed_seq::read_slice, padded_it::ChunkIt};
 
 use super::*;
 

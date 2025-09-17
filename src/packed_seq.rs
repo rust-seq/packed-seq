@@ -1,6 +1,6 @@
 use traits::Seq;
 
-use crate::{intrinsics::transpose, traits::ChunkIt};
+use crate::{intrinsics::transpose, padded_it::ChunkIt};
 
 use super::*;
 
