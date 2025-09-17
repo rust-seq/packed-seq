@@ -90,7 +90,7 @@
 //! - `pyo3` enables `derive(pyo3::pyclass)` for `PackedSeqVec` and `AsciiSeqVec`.
 
 /// Functions with architecture-specific implementations.
-mod intrinsics {
+pub mod intrinsics {
     mod transpose;
     pub use transpose::transpose;
 }
