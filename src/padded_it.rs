@@ -54,6 +54,15 @@ impl<I> PaddedIt<I> {
 
     /// Advance the iterator by `n` steps, consuming the first `n` values (of each lane).
     #[inline(always)]
+    pub fn advance_with<T>(&mut self, n: usize, f: impl FnMut(T))
+    where
+        I: ChunkIt<T>,
+    {
+        self.it.by_ref().take(n).for_each(f);
+    }
+
+    /// Advance the iterator by `n` steps, consuming the first `n` values (of each lane).
+    #[inline(always)]
     pub fn zip<T, T2>(self, other: PaddedIt<impl ChunkIt<T2>>) -> PaddedIt<impl ChunkIt<(T, T2)>>
     where
         I: ChunkIt<T>,
