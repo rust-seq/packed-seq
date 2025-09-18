@@ -67,7 +67,15 @@ impl<I> PaddedIt<I> {
     where
         I: ChunkIt<T>,
     {
-        assert_eq!(self.padding, other.padding);
+        assert_eq!(
+            self.padding,
+            other.padding,
+            "Len1 {} Padding1 {} Len2 {} Padding2 {}",
+            self.it.len(),
+            self.padding,
+            other.it.len(),
+            other.padding
+        );
         assert_eq!(self.it.len(), other.it.len());
         PaddedIt {
             it: std::iter::zip(self.it, other.it),

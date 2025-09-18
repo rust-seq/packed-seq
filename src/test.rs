@@ -788,3 +788,38 @@ fn packed_seq_push_seq() {
     }
     assert_eq!(packed.seq.len(), total_len_in_bp.div_ceil(4) + 16,);
 }
+
+#[test]
+fn iter_ambiguity() {
+    let len = 10000;
+    let mut ascii = AsciiSeqVec::random(len);
+    // set 1% to N
+    for _ in 0..len / 100 {
+        ascii.seq[random_range(0..len)] = b'N';
+    }
+
+    let seq = BitSeqVec::from_ascii(&ascii.seq);
+
+    let bases: Vec<_> = seq.as_slice().iter_bp().map(|x| x as u32).collect();
+
+    for k in 1..=57 {
+        let naive: Vec<_> = bases
+            .windows(k)
+            .map(|x| x.iter().any(|&b| b > 0) as u32)
+            .collect();
+        let scalar: Vec<_> = seq
+            .as_slice()
+            .iter_kmer_ambiguity(k)
+            .map(|x| x as u32)
+            .collect();
+        assert_eq!(scalar, naive);
+
+        let simd = seq
+            .as_slice()
+            .par_iter_kmer_ambiguity(k, k)
+            .advance(k - 1)
+            .map(|x| x & S::splat(1))
+            .collect();
+        assert_eq!(scalar, simd);
+    }
+}

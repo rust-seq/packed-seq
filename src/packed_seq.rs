@@ -465,7 +465,6 @@ where
         // Without this, cur is not always inlined into a register.
         let mut buf = Box::new([S::ZERO; 8]);
 
-        // We skip the first o iterations.
         let par_len = if num_kmers == 0 {
             0
         } else {
@@ -605,9 +604,61 @@ where
     fn par_iter_bp_delayed_2(
         self,
         context: usize,
+        delay1: Delay,
+        delay2: Delay,
+    ) -> PaddedIt<impl ChunkIt<(S, S, S)>> {
+        self.par_iter_bp_delayed_2_with_factor(context, delay1, delay2, 1)
+    }
+
+    /// Compares 29 characters at a time.
+    fn cmp_lcp(&self, other: &Self) -> (std::cmp::Ordering, usize) {
+        let mut lcp = 0;
+        let min_len = self.len.min(other.len);
+        for i in (0..min_len).step_by(Self::K64) {
+            let len = (min_len - i).min(Self::K64);
+            let this = self.slice(i..i + len);
+            let other = other.slice(i..i + len);
+            let this_word = this.as_u64();
+            let other_word = other.as_u64();
+            if this_word != other_word {
+                // Unfortunately, bases are packed in little endian order, so the default order is reversed.
+                let eq = this_word ^ other_word;
+                let t = eq.trailing_zeros() as usize / B * B;
+                lcp += t / B;
+                let mask = (Self::CHAR_MASK) << t;
+                return ((this_word & mask).cmp(&(other_word & mask)), lcp);
+            }
+            lcp += len;
+        }
+        (self.len.cmp(&other.len), lcp)
+    }
+
+    #[inline(always)]
+    fn get(&self, index: usize) -> u8 {
+        let offset = self.offset + index;
+        let idx = offset / Self::C8;
+        let offset = offset % Self::C8;
+        (self.seq[idx] >> (B * offset)) & Self::CHAR_MASK as u8
+    }
+}
+
+impl<'s, const B: usize> PackedSeqBase<'s, B>
+where
+    Bits<B>: SupportedBits,
+{
+    /// When iterating over 2-bit and 1-bit encoded data in parallel,
+    /// one must ensure that they have the same stride.
+    /// On the larger type, set `factor` as the ratio to the smaller one,
+    /// so that the stride in bytes is a multiple of `factor`,
+    /// so that the smaller type also has a byte-aligned stride.
+    #[inline(always)]
+    pub fn par_iter_bp_delayed_2_with_factor(
+        self,
+        context: usize,
         Delay(delay1): Delay,
         Delay(delay2): Delay,
-    ) -> PaddedIt<impl ChunkIt<(S, S, S)>> {
+        factor: usize,
+    ) -> PaddedIt<impl ChunkIt<(S, S, S)> + use<'s, B>> {
         #[cfg(target_endian = "big")]
         panic!("Big endian architectures are not supported.");
 
@@ -623,7 +674,9 @@ where
         };
         // without +o, since we don't need them in the stride.
         let num_kmers_stride = this.len.saturating_sub(context - 1);
-        let n = num_kmers_stride.div_ceil(L).next_multiple_of(Self::C8);
+        let n = num_kmers_stride
+            .div_ceil(L)
+            .next_multiple_of(factor * Self::C8);
         let bytes_per_chunk = n / Self::C8;
         let padding = Self::C8 * L * bytes_per_chunk - num_kmers_stride;
 
@@ -701,37 +754,6 @@ where
             .advance(o);
 
         PaddedIt { it, padding }
-    }
-
-    /// Compares 29 characters at a time.
-    fn cmp_lcp(&self, other: &Self) -> (std::cmp::Ordering, usize) {
-        let mut lcp = 0;
-        let min_len = self.len.min(other.len);
-        for i in (0..min_len).step_by(Self::K64) {
-            let len = (min_len - i).min(Self::K64);
-            let this = self.slice(i..i + len);
-            let other = other.slice(i..i + len);
-            let this_word = this.as_u64();
-            let other_word = other.as_u64();
-            if this_word != other_word {
-                // Unfortunately, bases are packed in little endian order, so the default order is reversed.
-                let eq = this_word ^ other_word;
-                let t = eq.trailing_zeros() as usize / B * B;
-                lcp += t / B;
-                let mask = (Self::CHAR_MASK) << t;
-                return ((this_word & mask).cmp(&(other_word & mask)), lcp);
-            }
-            lcp += len;
-        }
-        (self.len.cmp(&other.len), lcp)
-    }
-
-    #[inline(always)]
-    fn get(&self, index: usize) -> u8 {
-        let offset = self.offset + index;
-        let idx = offset / Self::C8;
-        let offset = offset % Self::C8;
-        (self.seq[idx] >> (B * offset)) & Self::CHAR_MASK as u8
     }
 }
 
@@ -968,13 +990,30 @@ where
 }
 
 impl<'s> PackedSeqBase<'s, 1> {
-    /// An parallel iterator indicating for each kmer whether it contains ambiguous bases.
+    /// An iterator indicating for each kmer whether it contains ambiguous bases.
+    ///
+    /// Returns n-(k-1) elements.
     #[inline(always)]
-    pub fn par_iter_kmers(self, k: usize, context: usize) -> PaddedIt<impl ChunkIt<S> + use<'s>> {
+    pub fn iter_kmer_ambiguity(self, k: usize) -> impl ExactSizeIterator<Item = bool> + use<'s> {
+        let this = self.normalize();
+        assert!(k > 0);
+        assert!(k <= Self::K64);
+        (this.offset..this.offset + this.len - (k - 1)).map(move |i| self.read_kmer(k, i) != 0)
+    }
+
+    /// An parallel iterator indicating for each kmer whether it contains ambiguous bases.
+    ///
+    /// First element is the 'kmer' consisting only of the first character of each chunk.
+    #[inline(always)]
+    pub fn par_iter_kmer_ambiguity(
+        self,
+        k: usize,
+        context: usize,
+    ) -> PaddedIt<impl ChunkIt<S> + use<'s>> {
         #[cfg(target_endian = "big")]
         panic!("Big endian architectures are not supported.");
 
-        assert!(k <= 32, "par_iter_kmers requires k<=32");
+        assert!(k <= 64, "par_iter_kmers requires k<=64, but is {k}");
 
         let this = self.normalize();
         let o = this.offset;
@@ -993,7 +1032,7 @@ impl<'s> PackedSeqBase<'s, 1> {
 
         let offsets: [usize; 8] = from_fn(|l| l * bytes_per_chunk);
 
-        //           prev    cur
+        //     prev2 prev    cur
         //           0..31 | 32..63
         // mask      00001111110000
         // mask      00000111111000
@@ -1004,18 +1043,23 @@ impl<'s> PackedSeqBase<'s, 1> {
         //           32..63| 64..95
         // mask      11111100000000
 
-        let mut prev = S::ZERO;
-        let mut cur = S::ZERO;
+        // [prev2, prev, cur]
+        let mut cur = [S::ZERO; 3];
+        let mut mask = [S::ZERO; 3];
+        if k <= 32 {
+            // high k bits of cur
+            mask[2] = (S::MAX) << S::splat(32 - k as u32);
+        } else {
+            mask[2] = S::MAX;
+            mask[1] = (S::MAX) << S::splat(64 - k as u32);
+        }
 
-        let mut mask_prev = S::ZERO;
-        // high k bits of cur
-        let mut mask_cur = (S::MAX) << S::splat(32 - k as u32);
-
-        fn rotate_mask(prev: &mut S, cur: &mut S) {
-            let carry = *prev >> S::splat(31);
-            *prev = *prev << 1;
-            *cur = *cur << 1;
-            *cur = *cur | carry;
+        fn rotate_mask(mask: &mut [S; 3]) {
+            let carry01 = mask[0] >> S::splat(31);
+            let carry12 = mask[1] >> S::splat(31);
+            mask[0] = mask[0] << 1;
+            mask[1] = (mask[1] << 1) | carry01;
+            mask[2] = (mask[2] << 1) | carry12;
         }
 
         // Boxed, so it doesn't consume precious registers.
@@ -1037,14 +1081,18 @@ impl<'s> PackedSeqBase<'s, 1> {
                             );
                             *buf = transpose(data);
                         }
-                        prev = cur;
-                        cur = buf[(i % Self::C256) / Self::C32];
-                        assert_eq!(mask_prev, S::splat(0));
-                        mask_prev = mask_cur;
+                        cur[0] = cur[1];
+                        cur[1] = cur[2];
+                        cur[2] = buf[(i % Self::C256) / Self::C32];
+                        assert_eq!(mask[0], S::splat(0));
+                        mask[0] = mask[1];
+                        mask[1] = mask[2];
+                        mask[2] = S::splat(0);
                     }
 
-                    rotate_mask(&mut mask_prev, &mut mask_cur);
-                    !((cur & mask_cur) | (prev & mask_prev)).cmp_eq(S::splat(0))
+                    rotate_mask(&mut mask);
+                    !((cur[0] & mask[0]) | (cur[1] & mask[1]) | (cur[2] & mask[2]))
+                        .cmp_eq(S::splat(0))
                 },
             )
             .advance(o);
