@@ -138,10 +138,10 @@ pub use wide::u32x8;
 pub const L: usize = 8;
 
 pub use ascii_seq::{AsciiSeq, AsciiSeqVec};
+pub use packed_seq::{BitSeq, BitSeqVec, PackedSeq, PackedSeqVec};
 pub use packed_seq::{
     complement_base, complement_base_simd, complement_char, pack_char, unpack_base,
 };
-pub use packed_seq::{PackedSeq, PackedSeqVec};
 pub use padded_it::{Advance, ChunkIt, PaddedIt};
 pub use traits::{Delay, Seq, SeqVec};
 

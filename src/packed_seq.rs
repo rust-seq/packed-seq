@@ -51,6 +51,8 @@ where
 
 pub type PackedSeq<'s> = PackedSeqBase<'s, 2>;
 pub type PackedSeqVec = PackedSeqVecBase<2>;
+pub type BitSeq<'s> = PackedSeqBase<'s, 1>;
+pub type BitSeqVec = PackedSeqVecBase<1>;
 
 /// Convenience constants.
 /// B: bits per chat
@@ -90,6 +92,9 @@ where
         }
     }
 }
+
+// ======================================================================
+// 2-BIT HELPER METHODS
 
 /// Pack an ASCII `ACTGactg` character into its 2-bit representation, and panic for anything else.
 #[inline(always)]
@@ -178,7 +183,62 @@ pub const fn revcomp_u128(word: u128, len: usize) -> u128 {
     out >> (u128::BITS as usize - 2 * len)
 }
 
-impl<const B: usize> PackedSeqBase<'_, B>  where Bits<B>: SupportedBits {
+// ======================================================================
+// 1-BIT HELPER METHODS
+
+/// 1 when a char is ambiguous.
+#[inline(always)]
+pub fn char_is_ambiguous(base: u8) -> u8 {
+    match base {
+        b'a' | b'A' => 0,
+        b'c' | b'C' => 0,
+        b'g' | b'G' => 0,
+        b't' | b'T' => 0,
+        _ => 1,
+    }
+}
+
+/// Reverse the bits in the input.
+#[inline(always)]
+const fn rev_raw(word: u64) -> u64 {
+    #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
+    {
+        // ARM can reverse bits in a single instruction
+        word.reverse_bits()
+    }
+
+    #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
+    {
+        let mut res = word.swap_bytes();
+        res = ((res >> 4) & 0x0F0F_0F0F_0F0F_0F0F) | ((res & 0x0F0F_0F0F_0F0F_0F0F) << 4);
+        res = ((res >> 2) & 0x3333_3333_3333_3333) | ((res & 0x3333_3333_3333_3333) << 2);
+        res = ((res >> 1) & 0x5555_5555_5555_5555) | ((res & 0x5555_5555_5555_5555) << 1);
+        res ^ 0xAAAA_AAAA_AAAA_AAAA
+    }
+}
+
+/// Compute the reverse complement of a short sequence packed in a `u64`.
+#[inline(always)]
+pub const fn rev_u64(word: u64, len: usize) -> u64 {
+    rev_raw(word) >> (usize::BITS as usize - len)
+}
+
+#[inline(always)]
+pub const fn rev_u128(word: u128, len: usize) -> u128 {
+    let low = word as u64;
+    let high = (word >> 64) as u64;
+    let rlow = rev_raw(low);
+    let rhigh = rev_raw(high);
+    let out = ((rlow as u128) << 64) | rhigh as u128;
+    out >> (u128::BITS as usize - len)
+}
+
+// ======================================================================
+
+impl<const B: usize> PackedSeqBase<'_, B>
+where
+    Bits<B>: SupportedBits,
+{
     /// Shrink `seq` to only just cover the data.
     #[inline(always)]
     pub fn normalize(&self) -> Self {
@@ -258,7 +318,11 @@ where
     /// Panics if `self` is longer than 32 characters.
     #[inline(always)]
     fn revcomp_as_u64(&self) -> u64 {
-        revcomp_u64(self.as_u64(), self.len())
+        match B {
+            1 => rev_u64(self.as_u64(), self.len()),
+            2 => revcomp_u64(self.as_u64(), self.len()),
+            _ => panic!("Rev(comp) is only supported for 1-bit and 2-bit alphabets."),
+        }
     }
 
     /// Convert a short sequence (kmer) to a packed representation as `u128`.
@@ -283,7 +347,11 @@ where
     /// Panics if `self` is longer than 64 characters.
     #[inline(always)]
     fn revcomp_as_u128(&self) -> u128 {
-        revcomp_u128(self.as_u128(), self.len())
+        match B {
+            1 => rev_u128(self.as_u128(), self.len()),
+            2 => revcomp_u128(self.as_u128(), self.len()),
+            _ => panic!("Rev(comp) is only supported for 1-bit and 2-bit alphabets."),
+        }
     }
 
     #[inline(always)]
@@ -776,19 +844,22 @@ where
         start..end
     }
 
-    // FIXME
-    /// Push an ASCII sequence to an `PackedSeqVecBase`.
-    /// `Aa` map to `0`, `Cc` to `1`, `Gg` to `3`, and `Tt` to `2`.
+    /// For `PackedSeqVec` (2-bit encoding): map ASCII `ACGT` (and `acgt`) to DNA `0132` in that order.
     /// Other characters are silently mapped into `0..4`.
     ///
     /// Uses the BMI2 `pext` instruction when available, based on the
     /// `n_to_bits_pext` method described at
     /// <https://github.com/Daniel-Liu-c0deb0t/cute-nucleotides>.
     ///
-    /// TODO: Support multiple ways of dealing with non-`ACTG` characters:
-    /// - panic on non-`ACGT`,
-    /// - filter out non-`ACGT`.
+    /// For `BitSeqVec` (1-bit encoding): map `ACGTacgt` to `0`, and everything else to `1`.
     fn push_ascii(&mut self, seq: &[u8]) -> Range<usize> {
+        match B {
+            1 | 2 => {}
+            _ => panic!(
+                "Can only use ASCII input for 2-bit DNA packing, or 1-bit ambiguous indicators."
+            ),
+        }
+
         self.seq
             .resize((self.len + seq.len()).div_ceil(Self::C8) + PADDING, 0);
         let start_aligned = self.len.next_multiple_of(Self::C8);
@@ -796,11 +867,17 @@ where
         let len = seq.len();
         let mut idx = self.len / Self::C8;
 
+        let parse_base = |base| match B {
+            1 => char_is_ambiguous(base),
+            2 => pack_char_lossy(base),
+            _ => unreachable!(),
+        };
+
         let unaligned = core::cmp::min(start_aligned - start, len);
         if unaligned > 0 {
             let mut packed_byte = self.seq[idx];
             for &base in &seq[..unaligned] {
-                packed_byte |= pack_char_lossy(base) << ((self.len % Self::C8) * B);
+                packed_byte |= parse_base(base) << ((self.len % Self::C8) * B);
                 self.len += 1;
             }
             self.seq[idx] = packed_byte;
@@ -810,50 +887,55 @@ where
         #[allow(unused)]
         let mut last = unaligned;
 
-        #[cfg(all(target_arch = "x86_64", target_feature = "bmi2"))]
-        {
-            last = unaligned + (len - unaligned) / 8 * 8;
+        // TODO: Vectorization for B=1?
+        if B == 2 {
+            #[cfg(all(target_arch = "x86_64", target_feature = "bmi2"))]
+            {
+                last = unaligned + (len - unaligned) / 8 * 8;
 
-            for i in (unaligned..last).step_by(8) {
-                let chunk = &seq[i..i + 8].try_into().unwrap();
-                let ascii = u64::from_ne_bytes(*chunk);
-                let packed_bytes =
-                    unsafe { std::arch::x86_64::_pext_u64(ascii, 0x0606060606060606) };
-                self.seq[idx] = packed_bytes as u8;
-                idx += 1;
-                self.seq[idx] = (packed_bytes >> 8) as u8;
-                idx += 1;
-                self.len += 8;
+                for i in (unaligned..last).step_by(8) {
+                    let chunk = &seq[i..i + 8].try_into().unwrap();
+                    let ascii = u64::from_ne_bytes(*chunk);
+                    let packed_bytes =
+                        unsafe { std::arch::x86_64::_pext_u64(ascii, 0x0606060606060606) };
+                    self.seq[idx] = packed_bytes as u8;
+                    idx += 1;
+                    self.seq[idx] = (packed_bytes >> 8) as u8;
+                    idx += 1;
+                    self.len += 8;
+                }
             }
-        }
 
-        #[cfg(target_feature = "neon")]
-        {
-            use core::arch::aarch64::{vandq_u8, vdup_n_u8, vld1q_u8, vpadd_u8, vshlq_u8, vst1_u8};
-            use core::mem::transmute;
+            #[cfg(target_feature = "neon")]
+            {
+                use core::arch::aarch64::{
+                    vandq_u8, vdup_n_u8, vld1q_u8, vpadd_u8, vshlq_u8, vst1_u8,
+                };
+                use core::mem::transmute;
 
-            last = unaligned + (len - unaligned) / 16 * 16;
+                last = unaligned + (len - unaligned) / 16 * 16;
 
-            for i in (unaligned..last).step_by(16) {
-                unsafe {
-                    let ascii = vld1q_u8(seq.as_ptr().add(i));
-                    let masked_bits = vandq_u8(ascii, transmute([6i8; 16]));
-                    let (bits_0, bits_1) = transmute(vshlq_u8(
-                        masked_bits,
-                        transmute([-1i8, 1, 3, 5, -1, 1, 3, 5, -1, 1, 3, 5, -1, 1, 3, 5]),
-                    ));
-                    let half_packed = vpadd_u8(bits_0, bits_1);
-                    let packed = vpadd_u8(half_packed, vdup_n_u8(0));
-                    vst1_u8(self.seq.as_mut_ptr().add(idx), packed);
-                    idx += Self::C8;
-                    self.len += 16;
+                for i in (unaligned..last).step_by(16) {
+                    unsafe {
+                        let ascii = vld1q_u8(seq.as_ptr().add(i));
+                        let masked_bits = vandq_u8(ascii, transmute([6i8; 16]));
+                        let (bits_0, bits_1) = transmute(vshlq_u8(
+                            masked_bits,
+                            transmute([-1i8, 1, 3, 5, -1, 1, 3, 5, -1, 1, 3, 5, -1, 1, 3, 5]),
+                        ));
+                        let half_packed = vpadd_u8(bits_0, bits_1);
+                        let packed = vpadd_u8(half_packed, vdup_n_u8(0));
+                        vst1_u8(self.seq.as_mut_ptr().add(idx), packed);
+                        idx += Self::C8;
+                        self.len += 16;
+                    }
                 }
             }
         }
 
         let mut packed_byte = 0;
         for &base in &seq[last..] {
-            packed_byte |= pack_char_lossy(base) << ((self.len % Self::C8) * B);
+            packed_byte |= parse_base(base) << ((self.len % Self::C8) * B);
             self.len += 1;
             if self.len % Self::C8 == 0 {
                 self.seq[idx] = packed_byte;
@@ -882,5 +964,91 @@ where
         }
 
         Self { seq, len: n }
+    }
+}
+
+impl<'s> PackedSeqBase<'s, 1> {
+    /// An parallel iterator indicating for each kmer whether it contains ambiguous bases.
+    #[inline(always)]
+    pub fn par_iter_kmers(self, k: usize, context: usize) -> PaddedIt<impl ChunkIt<S> + use<'s>> {
+        #[cfg(target_endian = "big")]
+        panic!("Big endian architectures are not supported.");
+
+        assert!(k <= 32, "par_iter_kmers requires k<=32");
+
+        let this = self.normalize();
+        let o = this.offset;
+        assert!(o < Self::C8);
+
+        let num_kmers = if this.len == 0 {
+            0
+        } else {
+            (this.len + o).saturating_sub(context - 1)
+        };
+        // without +o, since we don't need them in the stride.
+        let num_kmers_stride = this.len.saturating_sub(context - 1);
+        let n = num_kmers_stride.div_ceil(L).next_multiple_of(Self::C8);
+        let bytes_per_chunk = n / Self::C8;
+        let padding = Self::C8 * L * bytes_per_chunk - num_kmers_stride;
+
+        let offsets: [usize; 8] = from_fn(|l| l * bytes_per_chunk);
+
+        //           prev    cur
+        //           0..31 | 32..63
+        // mask      00001111110000
+        // mask      00000111111000
+        // mask      00000011111100
+        // mask      00000001111110
+        // mask      00000000111111
+        //           cur     next
+        //           32..63| 64..95
+        // mask      11111100000000
+
+        let mut prev = S::ZERO;
+        let mut cur = S::ZERO;
+
+        let mut mask_prev = S::ZERO;
+        // high k bits of cur
+        let mut mask_cur = (S::MAX) << S::splat(32 - k as u32);
+
+        fn rotate_mask(prev: &mut S, cur: &mut S) {
+            let carry = *prev >> S::splat(31);
+            *prev = *prev << 1;
+            *cur = *cur << 1;
+            *cur = *cur | carry;
+        }
+
+        // Boxed, so it doesn't consume precious registers.
+        // Without this, cur is not always inlined into a register.
+        let mut buf = Box::new([S::ZERO; 8]);
+
+        // We skip the first o iterations.
+        let par_len = if num_kmers == 0 { 0 } else { n + k + o - 1 };
+        let it = (0..par_len)
+            .map(
+                #[inline(always)]
+                move |i| {
+                    if i % Self::C32 == 0 {
+                        if i % Self::C256 == 0 {
+                            // Read a u256 for each lane containing the next 128 characters.
+                            let data: [u32x8; 8] = from_fn(
+                                #[inline(always)]
+                                |lane| read_slice(this.seq, offsets[lane] + (i / Self::C8)),
+                            );
+                            *buf = transpose(data);
+                        }
+                        prev = cur;
+                        cur = buf[(i % Self::C256) / Self::C32];
+                        assert_eq!(mask_prev, S::splat(0));
+                        mask_prev = mask_cur;
+                    }
+
+                    rotate_mask(&mut mask_prev, &mut mask_cur);
+                    !((cur & mask_cur) | (prev & mask_prev)).cmp_eq(S::splat(0))
+                },
+            )
+            .advance(o);
+
+        PaddedIt { it, padding }
     }
 }
