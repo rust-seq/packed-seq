@@ -38,7 +38,9 @@ impl Seq<'_> for &[u8] {
 
     #[inline(always)]
     fn revcomp_as_u64(&self) -> u64 {
-        unimplemented!("Reverse complement is only defined for DNA sequences, use `AsciiSeq` or `PackedSeq` instead.")
+        unimplemented!(
+            "Reverse complement is only defined for DNA sequences, use `AsciiSeq` or `PackedSeq` instead."
+        )
     }
 
     #[inline(always)]
@@ -50,7 +52,9 @@ impl Seq<'_> for &[u8] {
 
     #[inline(always)]
     fn revcomp_as_u128(&self) -> u128 {
-        unimplemented!("Reverse complement is only defined for DNA sequences, use `AsciiSeq` or `PackedSeq` instead.")
+        unimplemented!(
+            "Reverse complement is only defined for DNA sequences, use `AsciiSeq` or `PackedSeq` instead."
+        )
     }
 
     /// Convert to an owned version.
@@ -61,7 +65,9 @@ impl Seq<'_> for &[u8] {
 
     #[inline(always)]
     fn to_revcomp(&self) -> Vec<u8> {
-        unimplemented!("Reverse complement is only defined for DNA sequences, use `AsciiSeq` or `PackedSeq` instead.")
+        unimplemented!(
+            "Reverse complement is only defined for DNA sequences, use `AsciiSeq` or `PackedSeq` instead."
+        )
     }
 
     #[inline(always)]

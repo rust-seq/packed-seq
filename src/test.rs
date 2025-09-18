@@ -1,4 +1,4 @@
-use rand::{random_range, Rng};
+use rand::{Rng, random_range};
 use wide::u32x8;
 
 use super::*;
@@ -413,11 +413,7 @@ fn par_iter_bp_delayed1() {
 }
 
 fn get(slice: &[u8], i: usize) -> u8 {
-    if i < slice.len() {
-        slice[i]
-    } else {
-        b'A'
-    }
+    if i < slice.len() { slice[i] } else { b'A' }
 }
 
 #[test]
