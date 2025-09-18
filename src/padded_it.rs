@@ -51,6 +51,20 @@ impl<I> PaddedIt<I> {
         self.it = self.it.advance(n);
         self
     }
+
+    /// Advance the iterator by `n` steps, consuming the first `n` values (of each lane).
+    #[inline(always)]
+    pub fn zip<T, T2>(self, other: PaddedIt<impl ChunkIt<T2>>) -> PaddedIt<impl ChunkIt<(T, T2)>>
+    where
+        I: ChunkIt<T>,
+    {
+        assert_eq!(self.padding, other.padding);
+        assert_eq!(self.it.len(), other.it.len());
+        PaddedIt {
+            it: std::iter::zip(self.it, other.it),
+            padding: self.padding,
+        }
+    }
 }
 
 impl<I: ChunkIt<u32x8>> PaddedIt<I> {
