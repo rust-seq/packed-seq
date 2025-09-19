@@ -791,42 +791,56 @@ fn packed_seq_push_seq() {
 
 #[test]
 fn iter_ambiguity() {
-    let len = 10000;
-    let mut ascii = AsciiSeqVec::random(len);
-    // set 1% to N
-    for _ in 0..len / 100 {
-        ascii.seq[random_range(0..len)] = b'N';
-    }
+    let lens = (0..10)
+        .chain((0..10).map(|_| rand::random_range(10..300)))
+        .chain((0..10).map(|_| rand::random_range(300..10000)));
 
-    let seq = BitSeqVec::from_ascii(&ascii.seq);
+    for len in lens {
+        let mut ascii = AsciiSeqVec::random(len);
+        // set 1% to N
+        for _ in 0..len / 100 {
+            ascii.seq[random_range(0..len)] = b'N';
+        }
 
-    let bases: Vec<_> = seq.as_slice().iter_bp().map(|x| x as u32).collect();
+        let seq = BitSeqVec::from_ascii(&ascii.seq);
 
-    for k in 1..=57 {
-        let naive: Vec<_> = bases
-            .windows(k)
-            .map(|x| x.iter().any(|&b| b > 0) as u32)
+        assert_eq!(seq.len(), len);
+
+        let bases: Vec<_> = ascii
+            .seq
+            .iter()
+            .map(|x| match x {
+                b'A' | b'C' | b'G' | b'T' => 0,
+                _ => 1,
+            })
             .collect();
-        let scalar: Vec<_> = seq
-            .as_slice()
-            .iter_kmer_ambiguity(k)
-            .map(|x| x as u32)
-            .collect();
-        assert_eq!(scalar, naive);
 
-        let simd = seq
-            .as_slice()
-            .par_iter_kmer_ambiguity(k, k, 0)
-            .advance(k - 1)
-            .map(|x| x & S::splat(1))
-            .collect();
-        assert_eq!(scalar, simd, "k={k}");
+        for k in 1..=57 {
+            let naive: Vec<_> = bases
+                .windows(k)
+                .map(|x| x.iter().any(|&b| b > 0) as u32)
+                .collect();
+            let scalar: Vec<_> = seq
+                .as_slice()
+                .iter_kmer_ambiguity(k)
+                .map(|x| x as u32)
+                .collect();
+            assert_eq!(scalar, naive, "k={k} len={len}");
 
-        let simd = seq
-            .as_slice()
-            .par_iter_kmer_ambiguity(k, k, k-1)
-            .map(|x| x & S::splat(1))
-            .collect();
-        assert_eq!(scalar, simd, "k={k}");
+            let simd = seq
+                .as_slice()
+                .par_iter_kmer_ambiguity(k, k, 0)
+                .advance(k - 1)
+                .map(|x| x & S::splat(1))
+                .collect();
+            assert_eq!(scalar, simd, "k={k} len={len}");
+
+            let simd = seq
+                .as_slice()
+                .par_iter_kmer_ambiguity(k, k, k - 1)
+                .map(|x| x & S::splat(1))
+                .collect();
+            assert_eq!(scalar, simd, "k={k} len={len}");
+        }
     }
 }
