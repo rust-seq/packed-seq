@@ -189,13 +189,10 @@ pub const fn revcomp_u128(word: u128, len: usize) -> u128 {
 /// 1 when a char is ambiguous.
 #[inline(always)]
 pub fn char_is_ambiguous(base: u8) -> u8 {
-    match base {
-        b'a' | b'A' => 0,
-        b'c' | b'C' => 0,
-        b'g' | b'G' => 0,
-        b't' | b'T' => 0,
-        _ => 1,
-    }
+    // (!matches!(base, b'A' | b'C'  | b'G'  | b'T' | b'a' | b'c'  | b'g'  | b't')) as u8
+    let table = b"ACTG";
+    let upper_mask = !(b'a' - b'A');
+    (table[pack_char_lossy(base) as usize] != (base & upper_mask)) as u8
 }
 
 /// Reverse the bits in the input.
@@ -952,6 +949,50 @@ where
                 }
             }
         }
+        if B == 1 {
+            // FIXME: Add NEON version.
+            #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
+            {
+                last = unaligned + len;
+                self.len = len;
+
+                for i in (unaligned..last).step_by(32) {
+                    use std::mem::transmute as t;
+
+                    use wide::CmpEq;
+                    // Wide doesn't have u8x32, so this is messy here...
+                    type S = wide::i8x32;
+                    let chars: S = unsafe { t(read_slice(seq, i)) };
+                    let upper_mask = !(b'a' - b'A');
+                    // make everything upper case
+                    let chars = chars & S::splat(upper_mask as i8);
+                    let lossy_encoded = chars & S::splat(6);
+                    let table = unsafe { S::from(t::<_, S>(*b"AxCxTxGxxxxxxxxxAxCxTxGxxxxxxxxx")) };
+                    let lookup: S = unsafe {
+                        t(std::arch::x86_64::_mm256_shuffle_epi8(
+                            t(table),
+                            t(lossy_encoded),
+                        ))
+                    };
+                    let packed_bytes = !(chars.cmp_eq(lookup).move_mask() as u32);
+
+                    if i + 32 <= last {
+                        self.seq[idx + 0] = packed_bytes as u8;
+                        self.seq[idx + 1] = (packed_bytes >> 8) as u8;
+                        self.seq[idx + 2] = (packed_bytes >> 16) as u8;
+                        self.seq[idx + 3] = (packed_bytes >> 24) as u8;
+                        idx += 4;
+                    } else {
+                        let mut b = 0;
+                        while i + b < last {
+                            self.seq[idx] = (packed_bytes >> b) as u8;
+                            idx += 1;
+                            b += 8;
+                        }
+                    }
+                }
+            }
+        }
 
         let mut packed_byte = 0;
         for &base in &seq[last..] {
@@ -996,7 +1037,8 @@ impl<'s> PackedSeqBase<'s, 1> {
         let this = self.normalize();
         assert!(k > 0);
         assert!(k <= Self::K64);
-        (this.offset..this.offset + this.len - (k - 1)).map(move |i| self.read_kmer(k, i) != 0)
+        (this.offset..this.offset + this.len.saturating_sub(k - 1))
+            .map(move |i| self.read_kmer(k, i) != 0)
     }
 
     /// An parallel iterator indicating for each kmer whether it contains ambiguous bases.
