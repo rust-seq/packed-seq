@@ -816,10 +816,17 @@ fn iter_ambiguity() {
 
         let simd = seq
             .as_slice()
-            .par_iter_kmer_ambiguity(k, k)
+            .par_iter_kmer_ambiguity(k, k, 0)
             .advance(k - 1)
             .map(|x| x & S::splat(1))
             .collect();
-        assert_eq!(scalar, simd);
+        assert_eq!(scalar, simd, "k={k}");
+
+        let simd = seq
+            .as_slice()
+            .par_iter_kmer_ambiguity(k, k, k-1)
+            .map(|x| x & S::splat(1))
+            .collect();
+        assert_eq!(scalar, simd, "k={k}");
     }
 }

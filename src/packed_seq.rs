@@ -1002,11 +1002,16 @@ impl<'s> PackedSeqBase<'s, 1> {
     /// An parallel iterator indicating for each kmer whether it contains ambiguous bases.
     ///
     /// First element is the 'kmer' consisting only of the first character of each chunk.
+    ///
+    /// `k`: length of windows to check
+    /// `context`: number of overlapping iterations +1. To determine stride of each lane.
+    /// `skip`: Set to `context-1` to skip the iterations added by the context.
     #[inline(always)]
     pub fn par_iter_kmer_ambiguity(
         self,
         k: usize,
         context: usize,
+        skip: usize,
     ) -> PaddedIt<impl ChunkIt<S> + use<'s>> {
         #[cfg(target_endian = "big")]
         panic!("Big endian architectures are not supported.");
@@ -1052,12 +1057,13 @@ impl<'s> PackedSeqBase<'s, 1> {
             mask[1] = (S::MAX) << S::splat(64 - k as u32);
         }
 
-        fn rotate_mask(mask: &mut [S; 3]) {
-            let carry01 = mask[0] >> S::splat(31);
-            let carry12 = mask[1] >> S::splat(31);
-            mask[0] = mask[0] << 1;
-            mask[1] = (mask[1] << 1) | carry01;
-            mask[2] = (mask[2] << 1) | carry12;
+        #[inline(always)]
+        fn rotate_mask(mask: &mut [S; 3], r: u32) {
+            let carry01 = mask[0] >> S::splat(32 - r);
+            let carry12 = mask[1] >> S::splat(32 - r);
+            mask[0] = mask[0] << r;
+            mask[1] = (mask[1] << r) | carry01;
+            mask[2] = (mask[2] << r) | carry12;
         }
 
         // Boxed, so it doesn't consume precious registers.
@@ -1066,34 +1072,56 @@ impl<'s> PackedSeqBase<'s, 1> {
 
         // We skip the first o iterations.
         let par_len = if num_kmers == 0 { 0 } else { n + k + o - 1 };
-        let it = (0..par_len)
-            .map(
-                #[inline(always)]
-                move |i| {
-                    if i % Self::C32 == 0 {
-                        if i % Self::C256 == 0 {
-                            // Read a u256 for each lane containing the next 128 characters.
-                            let data: [u32x8; 8] = from_fn(
-                                #[inline(always)]
-                                |lane| read_slice(this.seq, offsets[lane] + (i / Self::C8)),
-                            );
-                            *buf = transpose(data);
-                        }
-                        cur[0] = cur[1];
-                        cur[1] = cur[2];
-                        cur[2] = buf[(i % Self::C256) / Self::C32];
-                        assert_eq!(mask[0], S::splat(0));
-                        mask[0] = mask[1];
-                        mask[1] = mask[2];
-                        mask[2] = S::splat(0);
-                    }
 
-                    rotate_mask(&mut mask);
-                    !((cur[0] & mask[0]) | (cur[1] & mask[1]) | (cur[2] & mask[2]))
-                        .cmp_eq(S::splat(0))
-                },
-            )
-            .advance(o);
+        let mut read = {
+            #[inline(always)]
+            move |i: usize, cur: &mut [S; 3]| {
+                if i % Self::C256 == 0 {
+                    // Read a u256 for each lane containing the next 128 characters.
+                    let data: [u32x8; 8] = from_fn(
+                        #[inline(always)]
+                        |lane| read_slice(this.seq, offsets[lane] + (i / Self::C8)),
+                    );
+                    *buf = transpose(data);
+                }
+                cur[0] = cur[1];
+                cur[1] = cur[2];
+                cur[2] = buf[(i % Self::C256) / Self::C32];
+            }
+        };
+
+        // Precompute the first o+skip iterations.
+        let mut to_skip = o + skip;
+        let mut i = 0;
+        while to_skip > 0 {
+            read(i, &mut cur);
+            i += 32;
+            if to_skip >= 32 {
+                to_skip -= 32;
+            } else {
+                mask[0] = mask[1];
+                mask[1] = mask[2];
+                mask[2] = S::splat(0);
+                // rotate mask by remainder
+                rotate_mask(&mut mask, to_skip as u32);
+                break;
+            }
+        }
+
+        let it = (o + skip..par_len).map(
+            #[inline(always)]
+            move |i| {
+                if i % Self::C32 == 0 {
+                    read(i, &mut cur);
+                    mask[0] = mask[1];
+                    mask[1] = mask[2];
+                    mask[2] = S::splat(0);
+                }
+
+                rotate_mask(&mut mask, 1);
+                !((cur[0] & mask[0]) | (cur[1] & mask[1]) | (cur[2] & mask[2])).cmp_eq(S::splat(0))
+            },
+        );
 
         PaddedIt { it, padding }
     }
