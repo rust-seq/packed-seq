@@ -497,8 +497,6 @@ where
         PaddedIt { it, padding }
     }
 
-    /// NOTE: When `self` starts does not start at a byte boundary, the
-    /// 'delayed' character is not guaranteed to be `0`.
     #[inline(always)]
     fn par_iter_bp_delayed(
         self,
