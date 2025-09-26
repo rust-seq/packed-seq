@@ -1041,7 +1041,7 @@ impl<'s> PackedSeqBase<'s, 1> {
             .map(move |i| self.read_kmer(k, i) != 0)
     }
 
-    /// An parallel iterator indicating for each kmer whether it contains ambiguous bases.
+    /// A parallel iterator indicating for each kmer whether it contains ambiguous bases.
     ///
     /// First element is the 'kmer' consisting only of the first character of each chunk.
     ///
@@ -1058,7 +1058,7 @@ impl<'s> PackedSeqBase<'s, 1> {
         #[cfg(target_endian = "big")]
         panic!("Big endian architectures are not supported.");
 
-        assert!(k <= 64, "par_iter_kmers requires k<=64, but is {k}");
+        assert!(k <= 64, "par_iter_kmers requires k<=64, but k={k}");
 
         let this = self.normalize();
         let o = this.offset;
