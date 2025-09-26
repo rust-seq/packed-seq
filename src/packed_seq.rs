@@ -1,4 +1,5 @@
 use traits::Seq;
+use wide::u16x8;
 
 use crate::{intrinsics::transpose, padded_it::ChunkIt};
 
@@ -261,6 +262,20 @@ pub(crate) fn read_slice(seq: &[u8], idx: usize) -> u32x8 {
     // assert!(idx <= seq.len());
     let mut result = [0u8; 32];
     let num_bytes = 32.min(seq.len().saturating_sub(idx));
+    unsafe {
+        let src = seq.as_ptr().add(idx);
+        std::ptr::copy_nonoverlapping(src, result.as_mut_ptr(), num_bytes);
+        std::mem::transmute(result)
+    }
+}
+
+/// Read up to 16 bytes starting at idx.
+#[allow(unused)]
+#[inline(always)]
+pub(crate) fn read_slice_16(seq: &[u8], idx: usize) -> u16x8 {
+    // assert!(idx <= seq.len());
+    let mut result = [0u8; 16];
+    let num_bytes = 16.min(seq.len().saturating_sub(idx));
     unsafe {
         let src = seq.as_ptr().add(idx);
         std::ptr::copy_nonoverlapping(src, result.as_mut_ptr(), num_bytes);
@@ -904,7 +919,6 @@ where
         #[allow(unused)]
         let mut last = unaligned;
 
-        // TODO: Vectorization for B=1?
         if B == 2 {
             #[cfg(all(target_arch = "x86_64", target_feature = "bmi2"))]
             {
@@ -950,7 +964,6 @@ where
             }
         }
         if B == 1 {
-            // FIXME: Add NEON version.
             #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
             {
                 last = unaligned + len;
@@ -982,6 +995,41 @@ where
                         self.seq[idx + 2] = (packed_bytes >> 16) as u8;
                         self.seq[idx + 3] = (packed_bytes >> 24) as u8;
                         idx += 4;
+                    } else {
+                        let mut b = 0;
+                        while i + b < last {
+                            self.seq[idx] = (packed_bytes >> b) as u8;
+                            idx += 1;
+                            b += 8;
+                        }
+                    }
+                }
+            }
+
+            #[cfg(target_feature = "neon")]
+            {
+                last = unaligned + len;
+                self.len = len;
+
+                for i in (unaligned..last).step_by(16) {
+                    use std::mem::transmute as t;
+
+                    use wide::CmpEq;
+                    type S = wide::i8x16;
+                    let chars: S = unsafe { t(read_slice_16(seq, i)) };
+                    let upper_mask = !(b'a' - b'A');
+                    // make everything upper case
+                    let chars = chars & S::splat(upper_mask as i8);
+                    let lossy_encoded = chars & S::splat(6);
+                    let table = unsafe { S::from(t::<_, S>(*b"AxCxTxGxxxxxxxxx")) };
+                    let lookup: S =
+                        unsafe { t(std::arch::aarch64::vqtbl1q_u8(t(table), t(lossy_encoded))) };
+                    let packed_bytes = !(chars.cmp_eq(lookup).move_mask() as u16);
+
+                    if i + 16 <= last {
+                        self.seq[idx + 0] = packed_bytes as u8;
+                        self.seq[idx + 1] = (packed_bytes >> 8) as u8;
+                        idx += 2;
                     } else {
                         let mut b = 0;
                         while i + b < last {
