@@ -1,9 +1,13 @@
 # Changelog
 
 ## 4.0.0
+- **Feature**: Add `BitSeq` and `BitSeqVec` as 1-bit encoded 'sequences' that by default
+  indicate the positions of ambiguous (non-ACTG) characters.
+- **Feature**: Add `BitSeq::par_iter_kmer_ambiguity` that returns for each kmer
+  whether it contains an ambiguous base.
+- **Breaking**: Encapsulate parallel iterators in new `PaddedIt { it, padding: usize }` type with `.map`, `.advance`, `zip`, and `.collect_into` functions.
 - **Breaking**: Make `delay` passed into `par_iter_bp_delayed` a strong type `Delay(pub usize)` to
   reduce potential for bugs.
-- **Breaking**: Encapsulate parallel iterators in new `PaddedIt { it, padding: usize }` type with `.map`, `.advance`, and `.collect_into` functions.
 - Make `intrinsics::transpose` public for use in `collect_and_dedup` in `simd_minimizers`.
 
 ## 3.2.1
