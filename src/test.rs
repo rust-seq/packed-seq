@@ -739,6 +739,13 @@ fn rc_rc_seq() {
             let rc_rc = rc.as_slice().to_revcomp();
             assert_eq!(seq.seq, rc_rc.seq);
         }
+
+        {
+            let seq = BitSeqVec::random(n, 0.1);
+            let rc = seq.as_slice().to_revcomp();
+            let rc_rc = rc.as_slice().to_revcomp();
+            assert_eq!(seq.seq, rc_rc.seq);
+        }
     }
 }
 
