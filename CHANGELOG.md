@@ -1,5 +1,9 @@
 # Changelog
 
+## 4.0.1
+- feature: optimize `BitSeq::from_ascii` for NEON.
+- bugfix: 1-bit `reverse` was also doing 'complement'.
+
 ## 4.0.0
 - **Feature**: Add `BitSeq` and `BitSeqVec` as 1-bit encoded 'sequences' that by default
   indicate the positions of ambiguous (non-ACTG) characters.
