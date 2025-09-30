@@ -126,6 +126,7 @@ mod traits;
 
 mod ascii;
 mod ascii_seq;
+mod packed_n_seq;
 mod packed_seq;
 mod padded_it;
 
@@ -138,6 +139,7 @@ pub use wide::u32x8;
 pub const L: usize = 8;
 
 pub use ascii_seq::{AsciiSeq, AsciiSeqVec};
+pub use packed_n_seq::{PackedNSeq, PackedNSeqVec};
 pub use packed_seq::{BitSeq, BitSeqVec, PackedSeq, PackedSeqVec};
 pub use packed_seq::{
     complement_base, complement_base_simd, complement_char, pack_char, unpack_base,
