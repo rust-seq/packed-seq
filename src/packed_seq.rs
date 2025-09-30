@@ -196,39 +196,16 @@ pub fn char_is_ambiguous(base: u8) -> u8 {
     (table[pack_char_lossy(base) as usize] != (base & upper_mask)) as u8
 }
 
-/// Reverse the bits in the input.
-#[inline(always)]
-const fn rev_raw(word: u64) -> u64 {
-    #[cfg(any(target_arch = "arm", target_arch = "aarch64"))]
-    {
-        // ARM can reverse bits in a single instruction
-        word.reverse_bits()
-    }
-
-    #[cfg(not(any(target_arch = "arm", target_arch = "aarch64")))]
-    {
-        let mut res = word.swap_bytes();
-        res = ((res >> 4) & 0x0F0F_0F0F_0F0F_0F0F) | ((res & 0x0F0F_0F0F_0F0F_0F0F) << 4);
-        res = ((res >> 2) & 0x3333_3333_3333_3333) | ((res & 0x3333_3333_3333_3333) << 2);
-        res = ((res >> 1) & 0x5555_5555_5555_5555) | ((res & 0x5555_5555_5555_5555) << 1);
-        res ^ 0xAAAA_AAAA_AAAA_AAAA
-    }
-}
-
-/// Compute the reverse complement of a short sequence packed in a `u64`.
+/// Reverse `len` bits packed in a `u64`.
 #[inline(always)]
 pub const fn rev_u64(word: u64, len: usize) -> u64 {
-    rev_raw(word) >> (usize::BITS as usize - len)
+    word.reverse_bits() >> (usize::BITS as usize - len)
 }
 
+/// Reverse `len` bits packed in a `u128`.
 #[inline(always)]
 pub const fn rev_u128(word: u128, len: usize) -> u128 {
-    let low = word as u64;
-    let high = (word >> 64) as u64;
-    let rlow = rev_raw(low);
-    let rhigh = rev_raw(high);
-    let out = ((rlow as u128) << 64) | rhigh as u128;
-    out >> (u128::BITS as usize - len)
+    word.reverse_bits() >> (u128::BITS as usize - len)
 }
 
 // ======================================================================
