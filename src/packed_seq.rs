@@ -1073,6 +1073,35 @@ where
     }
 }
 
+impl PackedSeqVecBase<1> {
+    pub fn with_len(n: usize) -> Self {
+        Self {
+            seq: vec![0; n.div_ceil(Self::C8) + PADDING],
+            len: n,
+        }
+    }
+
+    pub fn random(len: usize, n_frac: f32) -> Self {
+        let byte_len = len.div_ceil(Self::C8);
+        let mut seq = vec![0; byte_len + PADDING];
+
+        assert!(
+            (0.0..=0.3).contains(&n_frac),
+            "n_frac={} should be in [0, 0.3]",
+            n_frac
+        );
+
+        for _ in 0..(len as f32 * n_frac) as usize {
+            let idx = rand::random::<u64>() as usize % len;
+            let byte = idx / Self::C8;
+            let offset = idx % Self::C8;
+            seq[byte] |= 1 << offset;
+        }
+
+        Self { seq, len }
+    }
+}
+
 impl<'s> PackedSeqBase<'s, 1> {
     /// An iterator indicating for each kmer whether it contains ambiguous bases.
     ///
