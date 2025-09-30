@@ -844,3 +844,25 @@ fn iter_ambiguity() {
         }
     }
 }
+
+#[test]
+#[ignore = "This is a benchmark, not a test"]
+fn push_ascii_1bit_bench() {
+    let len = 1_000_000;
+    let rep = 1000;
+    let mut ascii = AsciiSeqVec::random(len);
+    // set 1% to N
+    for _ in 0..len / 100 {
+        ascii.seq[random_range(0..len)] = b'N';
+    }
+
+    let start = std::time::Instant::now();
+    for _ in 0..rep {
+        let seq = BitSeqVec::from_ascii(&ascii.seq);
+        core::hint::black_box(seq);
+    }
+    eprintln!(
+        "Throughput: {:.03} Gbp/s",
+        start.elapsed().as_secs_f64().recip()
+    );
+}

@@ -940,6 +940,7 @@ where
                 }
             }
         }
+
         if B == 1 {
             #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
             {
@@ -985,35 +986,31 @@ where
 
             #[cfg(target_feature = "neon")]
             {
-                last = unaligned + len;
-                self.len = len;
+                use core::arch::aarch64::*;
+                use core::mem::transmute;
 
-                for i in (unaligned..last).step_by(16) {
-                    use std::mem::transmute as t;
+                last = unaligned + (len - unaligned) / 64 * 64;
 
-                    use wide::CmpEq;
-                    type S = wide::i8x16;
-                    let chars: S = unsafe { t(read_slice_16(seq, i)) };
-                    let upper_mask = !(b'a' - b'A');
-                    // make everything upper case
-                    let chars = chars & S::splat(upper_mask as i8);
-                    let lossy_encoded = chars & S::splat(6);
-                    let table = unsafe { S::from(t::<_, S>(*b"AxCxTxGxxxxxxxxx")) };
-                    let lookup: S =
-                        unsafe { t(std::arch::aarch64::vqtbl1q_u8(t(table), t(lossy_encoded))) };
-                    let packed_bytes = !(chars.cmp_eq(lookup).move_mask() as u16);
+                for i in (unaligned..last).step_by(64) {
+                    unsafe {
+                        let ptr = seq.as_ptr().add(i);
+                        let chars = vld4q_u8(ptr);
 
-                    if i + 16 <= last {
-                        self.seq[idx + 0] = packed_bytes as u8;
-                        self.seq[idx + 1] = (packed_bytes >> 8) as u8;
-                        idx += 2;
-                    } else {
-                        let mut b = 0;
-                        while i + b < last {
-                            self.seq[idx] = (packed_bytes >> b) as u8;
-                            idx += 1;
-                            b += 8;
-                        }
+                        let upper_mask = vdupq_n_u8(!(b'a' - b'A'));
+                        let chars = neon::map_8x16x4(chars, |v| vandq_u8(v, upper_mask));
+
+                        let two_bits_mask = vdupq_n_u8(6);
+                        let lossy_encoded = neon::map_8x16x4(chars, |v| vandq_u8(v, two_bits_mask));
+
+                        let table = transmute(*b"AxCxTxGxxxxxxxxx");
+                        let lookup = neon::map_8x16x4(lossy_encoded, |v| vqtbl1q_u8(table, v));
+
+                        let mask = neon::map_two_8x16x4(chars, lookup, |v1, v2| vceqq_u8(v1, v2));
+                        let packed_bytes = !neon::movemask_64(mask);
+
+                        self.seq[idx..(idx + 8)].copy_from_slice(&packed_bytes.to_le_bytes());
+                        idx += 8;
+                        self.len += 64;
                     }
                 }
             }
@@ -1191,5 +1188,41 @@ impl<'s> PackedSeqBase<'s, 1> {
         );
 
         PaddedIt { it, padding }
+    }
+}
+
+#[cfg(target_feature = "neon")]
+mod neon {
+    use core::arch::aarch64::*;
+
+    #[inline(always)]
+    pub fn movemask_64(v: uint8x16x4_t) -> u64 {
+        // https://stackoverflow.com/questions/74722950/convert-vector-compare-mask-into-bit-mask-in-aarch64-simd-or-arm-neon/74748402#74748402
+        unsafe {
+            let acc = vsriq_n_u8(vsriq_n_u8(v.3, v.2, 1), vsriq_n_u8(v.1, v.0, 1), 2);
+            vget_lane_u64(
+                vreinterpret_u64_u8(vshrn_n_u16(
+                    vreinterpretq_u16_u8(vsriq_n_u8(acc, acc, 4)),
+                    4,
+                )),
+                0,
+            )
+        }
+    }
+
+    #[inline(always)]
+    pub fn map_8x16x4<F>(v: uint8x16x4_t, mut f: F) -> uint8x16x4_t
+    where
+        F: FnMut(uint8x16_t) -> uint8x16_t,
+    {
+        uint8x16x4_t(f(v.0), f(v.1), f(v.2), f(v.3))
+    }
+
+    #[inline(always)]
+    pub fn map_two_8x16x4<F>(v1: uint8x16x4_t, v2: uint8x16x4_t, mut f: F) -> uint8x16x4_t
+    where
+        F: FnMut(uint8x16_t, uint8x16_t) -> uint8x16_t,
+    {
+        uint8x16x4_t(f(v1.0, v2.0), f(v1.1, v2.1), f(v1.2, v2.2), f(v1.3, v2.3))
     }
 }
