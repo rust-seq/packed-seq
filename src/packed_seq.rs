@@ -505,11 +505,65 @@ where
     }
 
     #[inline(always)]
-    fn par_iter_bp_delayed(
+    fn par_iter_bp_delayed(self, context: usize, delay: Delay) -> PaddedIt<impl ChunkIt<(S, S)>> {
+        self.par_iter_bp_delayed_with_factor(context, delay, 1)
+    }
+
+    /// NOTE: When `self` starts does not start at a byte boundary, the
+    /// 'delayed' character is not guaranteed to be `0`.
+    #[inline(always)]
+    fn par_iter_bp_delayed_2(
+        self,
+        context: usize,
+        delay1: Delay,
+        delay2: Delay,
+    ) -> PaddedIt<impl ChunkIt<(S, S, S)>> {
+        self.par_iter_bp_delayed_2_with_factor(context, delay1, delay2, 1)
+    }
+
+    /// Compares 29 characters at a time.
+    fn cmp_lcp(&self, other: &Self) -> (std::cmp::Ordering, usize) {
+        let mut lcp = 0;
+        let min_len = self.len.min(other.len);
+        for i in (0..min_len).step_by(Self::K64) {
+            let len = (min_len - i).min(Self::K64);
+            let this = self.slice(i..i + len);
+            let other = other.slice(i..i + len);
+            let this_word = this.as_u64();
+            let other_word = other.as_u64();
+            if this_word != other_word {
+                // Unfortunately, bases are packed in little endian order, so the default order is reversed.
+                let eq = this_word ^ other_word;
+                let t = eq.trailing_zeros() as usize / B * B;
+                lcp += t / B;
+                let mask = (Self::CHAR_MASK) << t;
+                return ((this_word & mask).cmp(&(other_word & mask)), lcp);
+            }
+            lcp += len;
+        }
+        (self.len.cmp(&other.len), lcp)
+    }
+
+    #[inline(always)]
+    fn get(&self, index: usize) -> u8 {
+        let offset = self.offset + index;
+        let idx = offset / Self::C8;
+        let offset = offset % Self::C8;
+        (self.seq[idx] >> (B * offset)) & Self::CHAR_MASK as u8
+    }
+}
+
+impl<'s, const B: usize> PackedSeqBase<'s, B>
+where
+    Bits<B>: SupportedBits,
+{
+    #[inline(always)]
+    pub fn par_iter_bp_delayed_with_factor(
         self,
         context: usize,
         Delay(delay): Delay,
-    ) -> PaddedIt<impl ChunkIt<(S, S)>> {
+        factor: usize,
+    ) -> PaddedIt<impl ChunkIt<(S, S)> + use<'s, B>> {
         #[cfg(target_endian = "big")]
         panic!("Big endian architectures are not supported.");
 
@@ -530,7 +584,9 @@ where
         };
         // without +o, since we don't need them in the stride.
         let num_kmers_stride = this.len.saturating_sub(context - 1);
-        let n = num_kmers_stride.div_ceil(L).next_multiple_of(Self::C8);
+        let n = num_kmers_stride
+            .div_ceil(L)
+            .next_multiple_of(factor * Self::C8);
         let bytes_per_chunk = n / Self::C8;
         let padding = Self::C8 * L * bytes_per_chunk - num_kmers_stride;
 
@@ -603,54 +659,6 @@ where
         PaddedIt { it, padding }
     }
 
-    /// NOTE: When `self` starts does not start at a byte boundary, the
-    /// 'delayed' character is not guaranteed to be `0`.
-    #[inline(always)]
-    fn par_iter_bp_delayed_2(
-        self,
-        context: usize,
-        delay1: Delay,
-        delay2: Delay,
-    ) -> PaddedIt<impl ChunkIt<(S, S, S)>> {
-        self.par_iter_bp_delayed_2_with_factor(context, delay1, delay2, 1)
-    }
-
-    /// Compares 29 characters at a time.
-    fn cmp_lcp(&self, other: &Self) -> (std::cmp::Ordering, usize) {
-        let mut lcp = 0;
-        let min_len = self.len.min(other.len);
-        for i in (0..min_len).step_by(Self::K64) {
-            let len = (min_len - i).min(Self::K64);
-            let this = self.slice(i..i + len);
-            let other = other.slice(i..i + len);
-            let this_word = this.as_u64();
-            let other_word = other.as_u64();
-            if this_word != other_word {
-                // Unfortunately, bases are packed in little endian order, so the default order is reversed.
-                let eq = this_word ^ other_word;
-                let t = eq.trailing_zeros() as usize / B * B;
-                lcp += t / B;
-                let mask = (Self::CHAR_MASK) << t;
-                return ((this_word & mask).cmp(&(other_word & mask)), lcp);
-            }
-            lcp += len;
-        }
-        (self.len.cmp(&other.len), lcp)
-    }
-
-    #[inline(always)]
-    fn get(&self, index: usize) -> u8 {
-        let offset = self.offset + index;
-        let idx = offset / Self::C8;
-        let offset = offset % Self::C8;
-        (self.seq[idx] >> (B * offset)) & Self::CHAR_MASK as u8
-    }
-}
-
-impl<'s, const B: usize> PackedSeqBase<'s, B>
-where
-    Bits<B>: SupportedBits,
-{
     /// When iterating over 2-bit and 1-bit encoded data in parallel,
     /// one must ensure that they have the same stride.
     /// On the larger type, set `factor` as the ratio to the smaller one,
