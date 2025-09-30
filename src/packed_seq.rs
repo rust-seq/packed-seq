@@ -364,27 +364,39 @@ where
     }
 
     fn to_revcomp(&self) -> PackedSeqVecBase<B> {
-        let mut seq = self.seq[..(self.offset + self.len).div_ceil(4)]
+        match B {
+            1 | 2 => {}
+            _ => panic!("Can only reverse (&complement) 1-bit and 2-bit packed sequences.",),
+        }
+
+        let mut seq = self.seq[..(self.offset + self.len).div_ceil(Self::C8)]
             .iter()
             // 1. reverse the bytes
             .rev()
             .copied()
             .map(|mut res| {
-                // 2. swap the bases in the byte
-                // This is auto-vectorized.
-                res = ((res >> 4) & 0x0F) | ((res & 0x0F) << 4);
-                res = ((res >> 2) & 0x33) | ((res & 0x33) << 2);
-                res ^ 0xAA
+                match B {
+                    2 => {
+                        // 2. swap the bases in the byte
+                        // This is auto-vectorized.
+                        res = ((res >> 4) & 0x0F) | ((res & 0x0F) << 4);
+                        res = ((res >> 2) & 0x33) | ((res & 0x33) << 2);
+                        // Complement the bases.
+                        res ^ 0xAA
+                    }
+                    1 => res.reverse_bits(),
+                    _ => unreachable!(),
+                }
             })
             .chain(std::iter::repeat_n(0u8, PADDING))
             .collect::<Vec<u8>>();
 
         // 3. Shift away the offset.
-        let new_offset = (4 - (self.offset + self.len) % 4) % 4;
+        let new_offset = (Self::C8 - (self.offset + self.len) % Self::C8) % Self::C8;
 
         if new_offset > 0 {
             // Shift everything left by `2*new_offset` bits.
-            let shift = 2 * new_offset;
+            let shift = B * new_offset;
             *seq.last_mut().unwrap() >>= shift;
             // This loop is also auto-vectorized.
             for i in 0..seq.len() - 1 {
