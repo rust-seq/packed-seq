@@ -848,6 +848,10 @@ fn iter_ambiguity() {
 #[test]
 #[ignore = "This is a benchmark, not a test"]
 fn push_ascii_1bit_bench() {
+    eprintln!("\nBench BitSeqVec::from_ascii");
+
+    let mut packed = BitSeqVec::default();
+
     for len in [100, 150, 200, 1000, 1_000_000] {
         // 1Gbp input.
         let rep = 1_000_000_000 / len;
@@ -859,8 +863,37 @@ fn push_ascii_1bit_bench() {
 
         let start = std::time::Instant::now();
         for _ in 0..rep {
-            let seq = BitSeqVec::from_ascii(&ascii.seq);
-            core::hint::black_box(seq);
+            packed.push_ascii(&ascii.seq);
+            core::hint::black_box(&packed);
+            packed.clear();
+        }
+        eprintln!(
+            "Len {len:>7} => {:.03} Gbp/s",
+            start.elapsed().as_secs_f64().recip()
+        );
+    }
+}
+
+#[test]
+#[ignore = "This is a benchmark, not a test"]
+fn push_ascii_2bit_bench() {
+    eprintln!("\nBench PackedSeqVec::from_ascii");
+    let mut packed = PackedSeqVec::default();
+
+    for len in [100, 150, 200, 1000, 1_000_000] {
+        // 1Gbp input.
+        let rep = 1_000_000_000 / len;
+        let mut ascii = AsciiSeqVec::random(len);
+        // set 1% to N
+        for _ in 0..len / 100 {
+            ascii.seq[random_range(0..len)] = b'N';
+        }
+
+        let start = std::time::Instant::now();
+        for _ in 0..rep {
+            packed.push_ascii(&ascii.seq);
+            core::hint::black_box(&packed);
+            packed.clear();
         }
         eprintln!(
             "Len {len:>7} => {:.03} Gbp/s",
