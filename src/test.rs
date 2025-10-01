@@ -292,22 +292,54 @@ fn push_ascii_unaligned() {
 }
 
 #[test]
-fn push_ascii_random() {
-    for _ in 0..20 {
-        let seq = AsciiSeqVec::random(110).into_raw();
+fn push_ascii_2bit_random() {
+    let mut rng = rand::rng();
+
+    for _ in 0..100 {
+        let len = rng.random_range(1..=10000);
+        let seq = AsciiSeqVec::random(len).into_raw();
         let mut packed = PackedSeqVec::default();
-        let mut rng = rand::rng();
-        while packed.len() < 100 {
-            let push_len = rng.random_range(1..=8);
+        while packed.len() < len {
+            let push_len = rng.random_range(1..=1000.min(len - packed.len()));
             let range = packed.len()..(packed.len() + push_len);
             let range2 = packed.push_ascii(&seq[range.clone()]);
             assert_eq!(range, range2);
         }
         let slice = packed.as_slice();
-        for (i, &c) in seq.iter().take(100).enumerate() {
+        for (i, &c) in seq.iter().take(len).enumerate() {
             assert_eq!(slice.get_ascii(i), c);
         }
         let packed2 = PackedSeqVec::from_ascii(&seq[..packed.len()]);
+        let expected = packed2.as_slice();
+        assert!(slice.eq(&expected));
+    }
+}
+
+#[test]
+fn push_ascii_1bit_random() {
+    let mut rng = rand::rng();
+
+    for _ in 0..100 {
+        let len = rng.random_range(1..=200);
+        let mut seq = AsciiSeqVec::random(len).into_raw();
+        // set 1% to N
+        for _ in 0..len / 100 {
+            let idx = random_range(0..len);
+            seq[idx] = b'N';
+        }
+
+        let mut packed = BitSeqVec::default();
+        while packed.len() < len {
+            let push_len = rng.random_range(1..=1000.min(len - packed.len()));
+            let range = packed.len()..(packed.len() + push_len);
+            let range2 = packed.push_ascii(&seq[range.clone()]);
+            assert_eq!(range, range2);
+        }
+        let slice = packed.as_slice();
+        for i in 0..len {
+            assert_eq!(slice.get(i), (seq[i] == b'N') as u8, "i {i}");
+        }
+        let packed2 = BitSeqVec::from_ascii(&seq[..packed.len()]);
         let expected = packed2.as_slice();
         assert!(slice.eq(&expected));
     }

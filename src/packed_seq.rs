@@ -944,8 +944,8 @@ where
         if B == 1 {
             #[cfg(all(target_arch = "x86_64", target_feature = "avx2"))]
             {
-                last = unaligned + len;
-                self.len = len;
+                last = len;
+                self.len += len - unaligned;
 
                 for i in (unaligned..last).step_by(32) {
                     use std::mem::transmute as t;
@@ -975,11 +975,18 @@ where
                         idx += 4;
                     } else {
                         let mut b = 0;
-                        while i + b < last {
+                        while i + b + 8 < last {
                             self.seq[idx] = (packed_bytes >> b) as u8;
                             idx += 1;
                             b += 8;
                         }
+                        // force out-of-bounds bits to 0
+                        let byte = (packed_bytes >> b) as u8;
+                        // mask away high `extra` bits
+                        let extra = i + b + 8 - last;
+                        let byte = (byte << extra) >> extra;
+                        self.seq[idx] = byte;
+                        idx += 1;
                     }
                 }
             }
