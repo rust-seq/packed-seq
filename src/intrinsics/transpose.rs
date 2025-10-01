@@ -6,6 +6,7 @@ use wide::u32x8 as S;
 /// Transpose an 8x8 matrix of 8 `u32x8` SIMD elements.
 /// <https://stackoverflow.com/questions/25622745/transpose-an-8x8-float-using-avx-avx2>
 // TODO: Investigate other transpose functions mentioned there?
+#[inline(always)]
 pub fn transpose(m: [S; 8]) -> [S; 8] {
     _transpose(m)
 }
@@ -14,6 +15,7 @@ pub fn transpose(m: [S; 8]) -> [S; 8] {
 /// permute intrinsics.
 ///
 /// Copied from the standard library, since it is unstable.
+#[inline(always)]
 const fn _mm_shuffle(z: u32, y: u32, x: u32, w: u32) -> i32 {
     ((z << 6) | (y << 4) | (x << 2) | w) as i32
 }
