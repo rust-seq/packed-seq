@@ -933,3 +933,28 @@ fn push_ascii_2bit_bench() {
         );
     }
 }
+
+#[test]
+#[ignore = "This is a benchmark, not a test"]
+fn par_iter_bp_bench() {
+    eprintln!("\nBench PackedSeq::par_iter_bp");
+    for len in [100, 150, 200, 1000, 1_000_000] {
+        // 1Gbp input.
+        let rep = 1_000_000_000 / len;
+        let seq = PackedSeqVec::random(len);
+
+        let start = std::time::Instant::now();
+        for _ in 0..rep {
+            let mut x = u32x8::splat(0);
+            let PaddedIt { it, .. } = seq.as_slice().par_iter_bp(1);
+            it.for_each(|y| {
+                x += y;
+            });
+            core::hint::black_box(&x);
+        }
+        eprintln!(
+            "Len {len:>7} => {:.03} Gbp/s",
+            start.elapsed().as_secs_f64().recip()
+        );
+    }
+}
