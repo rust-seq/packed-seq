@@ -908,14 +908,17 @@ where
                 last = unaligned + (len - unaligned) / 8 * 8;
 
                 for i in (unaligned..last).step_by(8) {
-                    let chunk = &seq[i..i + 8].try_into().unwrap();
-                    let ascii = u64::from_ne_bytes(*chunk);
+                    let chunk =
+                        unsafe { seq.get_unchecked(i..i + 8).try_into().unwrap_unchecked() };
+                    let ascii = u64::from_le_bytes(chunk);
                     let packed_bytes =
-                        unsafe { std::arch::x86_64::_pext_u64(ascii, 0x0606060606060606) };
-                    self.seq[idx] = packed_bytes as u8;
-                    idx += 1;
-                    self.seq[idx] = (packed_bytes >> 8) as u8;
-                    idx += 1;
+                        unsafe { std::arch::x86_64::_pext_u64(ascii, 0x0606060606060606) } as u16;
+                    unsafe {
+                        self.seq
+                            .get_unchecked_mut(idx..(idx + 2))
+                            .copy_from_slice(&packed_bytes.to_le_bytes())
+                    };
+                    idx += 2;
                     self.len += 8;
                 }
             }
@@ -953,6 +956,8 @@ where
                 last = len;
                 self.len += len - unaligned;
 
+                let mut last_i = unaligned;
+
                 for i in (unaligned..last).step_by(32) {
                     use std::mem::transmute as t;
 
@@ -973,27 +978,36 @@ where
                     };
                     let packed_bytes = !(chars.cmp_eq(lookup).move_mask() as u32);
 
-                    if i + 32 <= last {
-                        self.seq[idx + 0] = packed_bytes as u8;
-                        self.seq[idx + 1] = (packed_bytes >> 8) as u8;
-                        self.seq[idx + 2] = (packed_bytes >> 16) as u8;
-                        self.seq[idx + 3] = (packed_bytes >> 24) as u8;
-                        idx += 4;
-                    } else {
-                        let mut b = 0;
-                        while i + b + 8 < last {
-                            self.seq[idx] = (packed_bytes >> b) as u8;
-                            idx += 1;
-                            b += 8;
-                        }
-                        // force out-of-bounds bits to 0
-                        let byte = (packed_bytes >> b) as u8;
-                        // mask away high `extra` bits
-                        let extra = i + b + 8 - last;
-                        let byte = (byte << extra) >> extra;
-                        self.seq[idx] = byte;
-                        idx += 1;
-                    }
+                    last_i = i;
+                    unsafe {
+                        self.seq
+                            .get_unchecked_mut(idx..(idx + 4))
+                            .copy_from_slice(&packed_bytes.to_le_bytes())
+                    };
+                    idx += 4;
+                }
+
+                // Fix up trailing bytes.
+                if unaligned < last {
+                    idx -= 4;
+                    let mut val = unsafe {
+                        u32::from_le_bytes(
+                            self.seq
+                                .get_unchecked(idx..(idx + 4))
+                                .try_into()
+                                .unwrap_unchecked(),
+                        )
+                    };
+                    // keep only the `last - last_i` low bits.
+                    let keep = last - last_i;
+                    val <<= 32 - keep;
+                    val >>= 32 - keep;
+                    unsafe {
+                        self.seq
+                            .get_unchecked_mut(idx..(idx + 4))
+                            .copy_from_slice(&val.to_le_bytes())
+                    };
+                    idx += keep.div_ceil(8);
                 }
             }
 
