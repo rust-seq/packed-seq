@@ -1,8 +1,23 @@
 # Changelog
 
+## 4.1.0
+- Perf: Further optimizations to `BitSeq::from_ascii` and `PackedSeq::from_ascii` for
+  both AVX and NEON. (Fewer out-of-bounds checks, NEON optimizations to work
+  around lack of `movemask`.)
+- Perf: Add small benchmarks (in `src/test.rs`) for `{Bit,Packed}Seq::push_ascii` and `PackedSeq::par_iter_bp`.
+- Perf: More `#[inline(always)]` for better performance with `lto="thin"`.
+- Feature: Add `BitSeqVec::random`.
+- Feature: Add `PackedNSeq` as a wrapper around `(PackedSeq, BitSeq)` to hold
+  2+1-bit encoded data, with the first 2 bits encoding ACGT, and the last bit
+  indicating non-ACGT IUPAC characters (such as N, R, Y, ...).
+- Feature: Add `PackedSeq::par_iter_bp_delayed_with_factor` (mirring
+  `par_iter_bp_delayed_2_with_factor`) for use in `seq-hash`.
+- Bugfix for repeated `BitSeq::push_ascii`.
+- Bugfix for `BitSeq::to_revcomp` (which was still 'complementing' instead of only reversing).
+
 ## 4.0.1
-- feature: optimize `BitSeq::from_ascii` for NEON.
-- bugfix: 1-bit `reverse` was also doing 'complement'.
+- Feature: optimize `BitSeq::from_ascii` for NEON.
+- Bugfix: 1-bit `reverse` was also doing 'complement'.
 
 ## 4.0.0
 - **Feature**: Add `BitSeq` and `BitSeqVec` as 1-bit encoded 'sequences' that by default
