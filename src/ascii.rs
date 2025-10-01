@@ -1,4 +1,4 @@
-use crate::{intrinsics::transpose, packed_seq::read_slice, padded_it::ChunkIt};
+use crate::{intrinsics::transpose, packed_seq::read_slice_32, padded_it::ChunkIt};
 
 use super::*;
 
@@ -104,7 +104,7 @@ impl Seq<'_> for &[u8] {
                         // Read a u256 for each lane containing the next 32 characters.
                         let data: [u32x8; 8] = from_fn(
                             #[inline(always)]
-                            |lane| read_slice(self, offsets[lane] + i),
+                            |lane| read_slice_32(self, offsets[lane] + i),
                         );
                         *buf = transpose(data);
                     }
@@ -161,7 +161,7 @@ impl Seq<'_> for &[u8] {
                         // Read a u256 for each lane containing the next 32 characters.
                         let data: [u32x8; 8] = from_fn(
                             #[inline(always)]
-                            |lane| read_slice(self, offsets[lane] + i),
+                            |lane| read_slice_32(self, offsets[lane] + i),
                         );
                         unsafe {
                             let mut_array: &mut [u32x8; 8] = buf
@@ -234,7 +234,7 @@ impl Seq<'_> for &[u8] {
                         // Read a u256 for each lane containing the next 32 characters.
                         let data: [u32x8; 8] = from_fn(
                             #[inline(always)]
-                            |lane| read_slice(self, offsets[lane] + i),
+                            |lane| read_slice_32(self, offsets[lane] + i),
                         );
                         unsafe {
                             let mut_array: &mut [u32x8; 8] = buf
