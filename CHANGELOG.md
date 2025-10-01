@@ -1,5 +1,7 @@
 # Changelog
 
+- Feat: `PackedNSeqVec::{default,clear,push_ascii}`
+
 ## 4.1.0
 - Perf: Further optimizations to `BitSeq::from_ascii` and `PackedSeq::from_ascii` for
   both AVX and NEON. (Fewer out-of-bounds checks, NEON optimizations to work
