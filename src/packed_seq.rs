@@ -235,14 +235,17 @@ where
 
 /// Read up to 32 bytes starting at idx.
 #[inline(always)]
-pub(crate) fn read_slice(seq: &[u8], idx: usize) -> u32x8 {
-    // assert!(idx <= seq.len());
-    let mut result = [0u8; 32];
-    let num_bytes = 32.min(seq.len().saturating_sub(idx));
+pub(crate) fn read_slice_32(seq: &[u8], idx: usize) -> u32x8 {
     unsafe {
         let src = seq.as_ptr().add(idx);
-        std::ptr::copy_nonoverlapping(src, result.as_mut_ptr(), num_bytes);
-        std::mem::transmute(result)
+        if idx + 32 <= seq.len() {
+            std::mem::transmute::<_, *const u32x8>(src).read_unaligned()
+        } else {
+            let num_bytes = seq.len() - idx;
+            let mut result = [0u8; 32];
+            std::ptr::copy_nonoverlapping(src, result.as_mut_ptr(), num_bytes);
+            std::mem::transmute(result)
+        }
     }
 }
 
@@ -250,13 +253,16 @@ pub(crate) fn read_slice(seq: &[u8], idx: usize) -> u32x8 {
 #[allow(unused)]
 #[inline(always)]
 pub(crate) fn read_slice_16(seq: &[u8], idx: usize) -> u16x8 {
-    // assert!(idx <= seq.len());
-    let mut result = [0u8; 16];
-    let num_bytes = 16.min(seq.len().saturating_sub(idx));
     unsafe {
         let src = seq.as_ptr().add(idx);
-        std::ptr::copy_nonoverlapping(src, result.as_mut_ptr(), num_bytes);
-        std::mem::transmute(result)
+        if idx + 16 <= seq.len() {
+            std::mem::transmute::<_, *const u16x8>(src).read_unaligned()
+        } else {
+            let num_bytes = seq.len() - idx;
+            let mut result = [0u8; 16];
+            std::ptr::copy_nonoverlapping(src, result.as_mut_ptr(), num_bytes);
+            std::mem::transmute(result)
+        }
     }
 }
 
@@ -468,7 +474,7 @@ where
                             // Read a u256 for each lane containing the next 128 characters.
                             let data: [u32x8; 8] = from_fn(
                                 #[inline(always)]
-                                |lane| read_slice(this.seq, offsets[lane] + (i / Self::C8)),
+                                |lane| read_slice_32(this.seq, offsets[lane] + (i / Self::C8)),
                             );
                             *buf = transpose(data);
                         }
@@ -546,7 +552,7 @@ where
                             // Read a u256 for each lane containing the next 128 characters.
                             let data: [u32x8; 8] = from_fn(
                                 #[inline(always)]
-                                |lane| read_slice(this.seq, offsets[lane] + (i / Self::C8)),
+                                |lane| read_slice_32(this.seq, offsets[lane] + (i / Self::C8)),
                             );
                             unsafe {
                                 *TryInto::<&mut [u32x8; 8]>::try_into(
@@ -696,7 +702,7 @@ where
                             // Read a u256 for each lane containing the next 128 characters.
                             let data: [u32x8; 8] = from_fn(
                                 #[inline(always)]
-                                |lane| read_slice(this.seq, offsets[lane] + (i / Self::C8)),
+                                |lane| read_slice_32(this.seq, offsets[lane] + (i / Self::C8)),
                             );
                             unsafe {
                                 *TryInto::<&mut [u32x8; 8]>::try_into(
@@ -953,7 +959,7 @@ where
                     use wide::CmpEq;
                     // Wide doesn't have u8x32, so this is messy here...
                     type S = wide::i8x32;
-                    let chars: S = unsafe { t(read_slice(seq, i)) };
+                    let chars: S = unsafe { t(read_slice_32(seq, i)) };
                     let upper_mask = !(b'a' - b'A');
                     // make everything upper case
                     let chars = chars & S::splat(upper_mask as i8);
@@ -1151,7 +1157,7 @@ impl<'s> PackedSeqBase<'s, 1> {
                     // Read a u256 for each lane containing the next 128 characters.
                     let data: [u32x8; 8] = from_fn(
                         #[inline(always)]
-                        |lane| read_slice(this.seq, offsets[lane] + (i / Self::C8)),
+                        |lane| read_slice_32(this.seq, offsets[lane] + (i / Self::C8)),
                     );
                     *buf = transpose(data);
                 }
