@@ -241,7 +241,7 @@ pub(crate) fn read_slice_32(seq: &[u8], idx: usize) -> u32x8 {
         if idx + 32 <= seq.len() {
             std::mem::transmute::<_, *const u32x8>(src).read_unaligned()
         } else {
-            let num_bytes = seq.len() - idx;
+            let num_bytes = seq.len().saturating_sub(idx);
             let mut result = [0u8; 32];
             std::ptr::copy_nonoverlapping(src, result.as_mut_ptr(), num_bytes);
             std::mem::transmute(result)
@@ -258,7 +258,7 @@ pub(crate) fn read_slice_16(seq: &[u8], idx: usize) -> u16x8 {
         if idx + 16 <= seq.len() {
             std::mem::transmute::<_, *const u16x8>(src).read_unaligned()
         } else {
-            let num_bytes = seq.len() - idx;
+            let num_bytes = seq.len().saturating_sub(idx);
             let mut result = [0u8; 16];
             std::ptr::copy_nonoverlapping(src, result.as_mut_ptr(), num_bytes);
             std::mem::transmute(result)
