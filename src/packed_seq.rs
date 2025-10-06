@@ -1156,7 +1156,8 @@ impl<'s> PackedSeqBase<'s, 1> {
         #[cfg(target_endian = "big")]
         panic!("Big endian architectures are not supported.");
 
-        assert!(k <= 64, "par_iter_kmers requires k<=64, but k={k}");
+        assert!(k > 0, "par_iter_kmers requires k>0, but k={k}");
+        assert!(k <= 96, "par_iter_kmers requires k<=96, but k={k}");
 
         let this = self.normalize();
         let o = this.offset;
@@ -1187,23 +1188,33 @@ impl<'s> PackedSeqBase<'s, 1> {
         // mask      11111100000000
 
         // [prev2, prev, cur]
-        let mut cur = [S::ZERO; 3];
-        let mut mask = [S::ZERO; 3];
-        if k <= 32 {
-            // high k bits of cur
-            mask[2] = (S::MAX) << S::splat(32 - k as u32);
-        } else {
-            mask[2] = S::MAX;
-            mask[1] = (S::MAX) << S::splat(64 - k as u32);
+        let mut cur = [S::ZERO; 4];
+        let mut mask = [S::ZERO; 4];
+        match k {
+            1..=32 => {
+                mask[3] = (S::MAX) << S::splat(32 - k as u32);
+            }
+            33..=64 => {
+                mask[3] = S::MAX;
+                mask[2] = (S::MAX) << S::splat(64 - k as u32);
+            }
+            65..=96 => {
+                mask[3] = S::MAX;
+                mask[2] = S::MAX;
+                mask[1] = (S::MAX) << S::splat(96 - k as u32);
+            }
+            _ => unreachable!(),
         }
 
         #[inline(always)]
-        fn rotate_mask(mask: &mut [S; 3], r: u32) {
+        fn rotate_mask(mask: &mut [S; 4], r: u32) {
             let carry01 = mask[0] >> S::splat(32 - r);
             let carry12 = mask[1] >> S::splat(32 - r);
+            let carry23 = mask[2] >> S::splat(32 - r);
             mask[0] = mask[0] << r;
             mask[1] = (mask[1] << r) | carry01;
             mask[2] = (mask[2] << r) | carry12;
+            mask[3] = (mask[3] << r) | carry23;
         }
 
         // Boxed, so it doesn't consume precious registers.
@@ -1215,7 +1226,7 @@ impl<'s> PackedSeqBase<'s, 1> {
 
         let mut read = {
             #[inline(always)]
-            move |i: usize, cur: &mut [S; 3]| {
+            move |i: usize, cur: &mut [S; 4]| {
                 if i % Self::C256 == 0 {
                     // Read a u256 for each lane containing the next 128 characters.
                     let data: [u32x8; 8] = from_fn(
@@ -1226,7 +1237,8 @@ impl<'s> PackedSeqBase<'s, 1> {
                 }
                 cur[0] = cur[1];
                 cur[1] = cur[2];
-                cur[2] = buf[(i % Self::C256) / Self::C32];
+                cur[2] = cur[3];
+                cur[3] = buf[(i % Self::C256) / Self::C32];
             }
         };
 
@@ -1241,7 +1253,8 @@ impl<'s> PackedSeqBase<'s, 1> {
             } else {
                 mask[0] = mask[1];
                 mask[1] = mask[2];
-                mask[2] = S::splat(0);
+                mask[2] = mask[3];
+                mask[3] = S::splat(0);
                 // rotate mask by remainder
                 rotate_mask(&mut mask, to_skip as u32);
                 break;
@@ -1255,11 +1268,13 @@ impl<'s> PackedSeqBase<'s, 1> {
                     read(i, &mut cur);
                     mask[0] = mask[1];
                     mask[1] = mask[2];
-                    mask[2] = S::splat(0);
+                    mask[2] = mask[3];
+                    mask[3] = S::splat(0);
                 }
 
                 rotate_mask(&mut mask, 1);
-                !((cur[0] & mask[0]) | (cur[1] & mask[1]) | (cur[2] & mask[2])).cmp_eq(S::splat(0))
+                !((cur[0] & mask[0]) | (cur[1] & mask[1]) | (cur[2] & mask[2]) | (cur[3] & mask[3]))
+                    .cmp_eq(S::splat(0))
             },
         );
 

@@ -1,6 +1,8 @@
 # Changelog
 
-- Feat: `PackedNSeqVec::{default,clear,push_ascii}`
+## 4.1.1
+- Feat: `PackedNSeqVec::{default,clear,push_ascii}`.
+- Feat: `BitSeqVec::par_iter_kmer_ambiguity` supports `k` up to `96`.
 
 ## 4.1.0
 - Perf: Further optimizations to `BitSeq::from_ascii` and `PackedSeq::from_ascii` for

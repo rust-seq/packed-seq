@@ -881,6 +881,29 @@ fn iter_ambiguity() {
                 .collect();
             assert_eq!(scalar, simd, "k={k} len={len}");
         }
+
+        // scalar doesn't work for k > 57
+        for k in 1..=96 {
+            let naive: Vec<_> = bases
+                .windows(k)
+                .map(|x| x.iter().any(|&b| b > 0) as u32)
+                .collect();
+
+            let simd = seq
+                .as_slice()
+                .par_iter_kmer_ambiguity(k, k, 0)
+                .advance(k - 1)
+                .map(|x| x & S::splat(1))
+                .collect();
+            assert_eq!(naive, simd, "k={k} len={len}");
+
+            let simd = seq
+                .as_slice()
+                .par_iter_kmer_ambiguity(k, k, k - 1)
+                .map(|x| x & S::splat(1))
+                .collect();
+            assert_eq!(naive, simd, "k={k} len={len}");
+        }
     }
 }
 
