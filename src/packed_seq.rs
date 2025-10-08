@@ -530,16 +530,41 @@ where
             n + context + o - 1
         };
 
-        let last_read = par_len.saturating_sub(1) / Self::C32 * Self::C32;
+        let last_read = par_len.saturating_sub(1) / Self::C256 * Self::C256;
         // Safety check for the `read_slice_32_unchecked`:
         assert!(offsets[7] + (last_read / Self::C8) + 32 <= this.seq.len());
+
+        let last_update = par_len.saturating_sub(1) / Self::C32 * Self::C32;
+
+        let new_last_read = last_update + Self::C32;
+        let new_first_read = new_last_read % Self::C256;
+        let offset = 8 - new_first_read / Self::C32;
+        // eprintln!("Offset {offset}");
+        let new_first_read_cmpl = (Self::C256 - new_first_read) % Self::C256;
+        assert!(new_first_read % Self::C32 == 0);
+        // // 8 reads per transpose
+        // let new_first_transpose = new_last_transpose % 8;
+
+        // Fill the first part of `buf`.
+        for x in offset..8 {
+            buf.get_mut()[x] = S::from(std::array::from_fn(|lane| {
+                // 4: #bytes in a u32 lane.
+                let idx = offsets[lane] + ((x - offset) * 4);
+                u32::from_le_bytes(
+                    unsafe { this.seq.get_unchecked(idx..idx + 4) }
+                        .try_into()
+                        .unwrap(),
+                )
+            }));
+            // eprintln!("Init index {x}");
+        }
 
         let it = (0..par_len)
             .map(
                 #[inline(always)]
                 move |i| {
                     if i % Self::C32 == 0 {
-                        if i % Self::C256 == 0 {
+                        if i % Self::C256 == new_first_read {
                             // Read a u256 for each lane containing the next 128 characters.
                             let data: [u32x8; 8] = from_fn(
                                 #[inline(always)]
@@ -548,11 +573,14 @@ where
                                     read_slice_32_unchecked(this.seq, idx)
                                 },
                             );
+                            // eprintln!("i = {i}: Update with transposed data");
                             // *buf = transpose(data);
                             *buf.get_mut() = transpose(data);
                         }
                         // cur = buf[(i % Self::C256) / Self::C32];
-                        cur = buf.get()[(i % Self::C256) / Self::C32];
+                        let idx = ((i + new_first_read_cmpl) % Self::C256) / Self::C32;
+                        // eprintln!("i = {i}: read idx {idx}");
+                        cur = buf.get()[idx];
                     }
                     // Extract the last 2 bits of each character.
                     let chars = cur & simd_char_mask;
