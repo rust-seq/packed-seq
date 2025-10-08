@@ -118,7 +118,11 @@ compile_error!(
 
 /// Functions with architecture-specific implementations.
 pub mod intrinsics {
+    mod deinterleave;
+    mod gather;
     mod transpose;
+    pub use deinterleave::deinterleave;
+    pub use gather::gather;
     pub use transpose::transpose;
 }
 

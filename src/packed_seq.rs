@@ -1,6 +1,7 @@
 use core::cell::RefCell;
+use std::mem::transmute;
 use traits::Seq;
-use wide::u16x8;
+use wide::{u16x8, u64x4};
 
 use crate::{intrinsics::transpose, padded_it::ChunkIt};
 
@@ -537,7 +538,8 @@ where
         let last_update = par_len.saturating_sub(1) / Self::C32 * Self::C32;
 
         let new_last_read = last_update + Self::C32;
-        let new_first_read = new_last_read % Self::C256;
+        // the initial gather goes
+        let new_first_read = new_last_read.next_multiple_of(2 * Self::C32) % Self::C256;
         let offset = 8 - new_first_read / Self::C32;
         // eprintln!("Offset {offset}");
         let new_first_read_cmpl = (Self::C256 - new_first_read) % Self::C256;
@@ -545,18 +547,31 @@ where
         // // 8 reads per transpose
         // let new_first_transpose = new_last_transpose % 8;
 
+        assert!(offset % 2 == 0);
+
         // Fill the first part of `buf`.
-        for x in offset..8 {
-            buf.get_mut()[x] = S::from(std::array::from_fn(|lane| {
-                // 4: #bytes in a u32 lane.
-                let idx = offsets[lane] + ((x - offset) * 4);
-                u32::from_le_bytes(
-                    unsafe { this.seq.get_unchecked(idx..idx + 4) }
-                        .try_into()
-                        .unwrap(),
-                )
-            }));
-            // eprintln!("Init index {x}");
+        let offsets_lanes_0_4: u64x4 = from_fn(|l| (l * bytes_per_chunk) as u64).into();
+        let offsets_lanes_4_8: u64x4 = from_fn(|l| ((4 + l) * bytes_per_chunk) as u64).into();
+        let base_ptr = this.seq.as_ptr();
+        for x in (offset..8).step_by(2) {
+            // Read a u64 containing the next 32 characters.
+            // 8*: #bytes in a u64
+            let idx_0_4 = offsets_lanes_0_4 + u64x4::splat(4 * (x - offset) as u64);
+            let idx_4_8 = offsets_lanes_4_8 + u64x4::splat(4 * (x - offset) as u64);
+            let u64_0_4: S = unsafe { transmute(intrinsics::gather(base_ptr, idx_0_4)) };
+            let u64_4_8: S = unsafe { transmute(intrinsics::gather(base_ptr, idx_4_8)) };
+            // Split into two vecs containing a u32 of 16 characters each.
+            (buf.get_mut()[x], buf.get_mut()[x + 1]) = intrinsics::deinterleave(u64_0_4, u64_4_8);
+
+            // buf.get_mut()[x] = S::from(std::array::from_fn(|lane| {
+            //     // 4: #bytes in a u32 lane.
+            //     let idx = offsets[lane] + ((x - offset) * 4);
+            //     u32::from_le_bytes(
+            //         unsafe { this.seq.get_unchecked(idx..idx + 4) }
+            //             .try_into()
+            //             .unwrap(),
+            //     )
+            // }));
         }
 
         let it = (0..par_len)
