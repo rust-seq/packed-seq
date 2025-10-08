@@ -36,6 +36,7 @@ impl RecycledBox {
 }
 
 impl Drop for RecycledBox {
+    #[inline(always)]
     fn drop(&mut self) {
         let mut x = None;
         core::mem::swap(&mut x, &mut self.0);
