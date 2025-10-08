@@ -1,9 +1,47 @@
+use core::cell::RefCell;
 use traits::Seq;
 use wide::u16x8;
 
 use crate::{intrinsics::transpose, padded_it::ChunkIt};
 
 use super::*;
+
+type SimdBuf = [S; 8];
+
+thread_local! {
+    static IT_BUF: RefCell<Vec<Box<SimdBuf>>> = {
+        RefCell::new(vec![Box::new(SimdBuf::default())])
+    };
+}
+
+struct RecycledBox(Option<Box<SimdBuf>>);
+
+impl RecycledBox {
+    #[inline(always)]
+    pub fn init_if_needed(&mut self) {
+        if self.0.is_none() {
+            self.0 = Some(Box::new(SimdBuf::default()));
+        }
+    }
+
+    #[inline(always)]
+    pub fn get(&self) -> &SimdBuf {
+        unsafe { self.0.as_ref().unwrap_unchecked() }
+    }
+
+    #[inline(always)]
+    pub fn get_mut(&mut self) -> &mut SimdBuf {
+        unsafe { self.0.as_mut().unwrap_unchecked() }
+    }
+}
+
+impl Drop for RecycledBox {
+    fn drop(&mut self) {
+        let mut x = None;
+        core::mem::swap(&mut x, &mut self.0);
+        IT_BUF.with_borrow_mut(|v| v.push(unsafe { x.unwrap_unchecked() }));
+    }
+}
 
 #[doc(hidden)]
 pub struct Bits<const B: usize>;
@@ -470,7 +508,10 @@ where
 
         // Boxed, so it doesn't consume precious registers.
         // Without this, cur is not always inlined into a register.
-        let mut buf = Box::new([S::ZERO; 8]);
+        // let mut buf = Box::new([S::ZERO; 8]);
+        let mut buf = IT_BUF.with_borrow_mut(|v| RecycledBox(v.pop()));
+        buf.init_if_needed();
+
         let simd_char_mask: u32x8 = unsafe { core::mem::transmute([Self::CHAR_MASK as u32; 8]) };
         let simd_b: u32x8 = unsafe { core::mem::transmute([B as u32; 8]) };
 
@@ -490,9 +531,11 @@ where
                                 #[inline(always)]
                                 |lane| read_slice_32(this.seq, offsets[lane] + (i / Self::C8)),
                             );
-                            *buf = transpose(data);
+                            // *buf = transpose(data);
+                            *buf.get_mut() = transpose(data);
                         }
-                        cur = buf[(i % Self::C256) / Self::C32];
+                        // cur = buf[(i % Self::C256) / Self::C32];
+                        cur = buf.get()[(i % Self::C256) / Self::C32];
                     }
                     // Extract the last 2 bits of each character.
                     let chars = cur & simd_char_mask;
