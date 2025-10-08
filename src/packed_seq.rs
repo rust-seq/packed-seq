@@ -259,7 +259,7 @@ where
         let start_byte = self.offset / Self::C8;
         let end_byte = (self.offset + self.len).div_ceil(Self::C8);
         Self {
-            seq: &self.seq[start_byte..end_byte],
+            seq: &self.seq[start_byte..end_byte + PADDING],
             offset: self.offset % Self::C8,
             len: self.len,
         }
@@ -333,7 +333,6 @@ where
     #[inline(always)]
     fn as_u64(&self) -> u64 {
         assert!(self.len() <= 64 / B);
-        debug_assert!(self.seq.len() <= 9);
 
         let mask = u64::MAX >> (64 - B * self.len());
 
@@ -367,7 +366,6 @@ where
             self.len() <= (128 - 8) / B + 1,
             "Sequences >61 long cannot be read with a single unaligned u128 read."
         );
-        debug_assert!(self.seq.len() <= 17);
 
         let mask = u128::MAX >> (128 - B * self.len());
 
@@ -888,7 +886,7 @@ where
     #[inline(always)]
     fn as_slice(&self) -> Self::Seq<'_> {
         PackedSeqBase {
-            seq: &self.seq[..self.len.div_ceil(Self::C8)],
+            seq: &self.seq[..self.len.div_ceil(Self::C8) + PADDING],
             offset: 0,
             len: self.len,
         }
