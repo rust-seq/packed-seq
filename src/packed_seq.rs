@@ -274,6 +274,16 @@ where
 
 /// Read up to 32 bytes starting at idx.
 #[inline(always)]
+pub(crate) unsafe fn read_slice_32_unchecked(seq: &[u8], idx: usize) -> u32x8 {
+    unsafe {
+        let src = seq.as_ptr().add(idx);
+        debug_assert!(idx + 32 <= seq.len());
+        std::mem::transmute::<_, *const u32x8>(src).read_unaligned()
+    }
+}
+
+/// Read up to 32 bytes starting at idx.
+#[inline(always)]
 pub(crate) fn read_slice_32(seq: &[u8], idx: usize) -> u32x8 {
     unsafe {
         let src = seq.as_ptr().add(idx);
@@ -519,6 +529,11 @@ where
         } else {
             n + context + o - 1
         };
+
+        let last_read = par_len.saturating_sub(1) / Self::C32 * Self::C32;
+        // Safety check for the `read_slice_32_unchecked`:
+        assert!(offsets[7] + (last_read / Self::C8) + 32 <= this.seq.len());
+
         let it = (0..par_len)
             .map(
                 #[inline(always)]
@@ -528,7 +543,10 @@ where
                             // Read a u256 for each lane containing the next 128 characters.
                             let data: [u32x8; 8] = from_fn(
                                 #[inline(always)]
-                                |lane| read_slice_32(this.seq, offsets[lane] + (i / Self::C8)),
+                                |lane| unsafe {
+                                    let idx = offsets[lane] + (i / Self::C8);
+                                    read_slice_32_unchecked(this.seq, idx)
+                                },
                             );
                             // *buf = transpose(data);
                             *buf.get_mut() = transpose(data);
