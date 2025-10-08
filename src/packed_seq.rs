@@ -471,6 +471,8 @@ where
         // Boxed, so it doesn't consume precious registers.
         // Without this, cur is not always inlined into a register.
         let mut buf = Box::new([S::ZERO; 8]);
+        let simd_char_mask: u32x8 = unsafe { core::mem::transmute([Self::CHAR_MASK as u32; 8]) };
+        let simd_b: u32x8 = unsafe { core::mem::transmute([B as u32; 8]) };
 
         let par_len = if num_kmers == 0 {
             0
@@ -493,9 +495,9 @@ where
                         cur = buf[(i % Self::C256) / Self::C32];
                     }
                     // Extract the last 2 bits of each character.
-                    let chars = cur & S::splat(Self::CHAR_MASK as u32);
+                    let chars = cur & simd_char_mask;
                     // Shift remaining characters to the right.
-                    cur = cur >> S::splat(B as u32);
+                    cur = cur >> simd_b;
                     chars
                 },
             )
