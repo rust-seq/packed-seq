@@ -54,7 +54,7 @@ impl SupportedBits for Bits<4> {}
 impl SupportedBits for Bits<8> {}
 
 /// Number of padding bytes at the end of `PackedSeqVecBase::seq`.
-const PADDING: usize = 16;
+pub(crate) const PADDING: usize = 40;
 
 /// A 2-bit packed non-owned slice of DNA bases.
 #[doc(hidden)]
@@ -913,14 +913,11 @@ where
     fn push_seq<'a>(&mut self, seq: PackedSeqBase<'_, B>) -> Range<usize> {
         let start = self.len.next_multiple_of(Self::C8) + seq.offset;
         let end = start + seq.len();
-        // Reserve *additional* capacity.
-        self.seq.reserve(seq.seq.len());
+
         // Shrink away the padding.
         self.seq.resize(self.len.div_ceil(Self::C8), 0);
         // Extend.
         self.seq.extend(seq.seq);
-        // Push padding.
-        self.seq.extend(std::iter::repeat_n(0u8, PADDING));
         self.len = end;
         start..end
     }

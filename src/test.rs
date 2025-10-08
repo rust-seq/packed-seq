@@ -1,6 +1,8 @@
 use rand::{Rng, random_range};
 use wide::u32x8;
 
+use crate::packed_seq::PADDING;
+
 use super::*;
 
 fn pack_naive(seq: &[u8]) -> (Vec<u8>, usize) {
@@ -825,7 +827,7 @@ fn packed_seq_push_seq() {
         );
         total_len_in_bp += len.next_multiple_of(4);
     }
-    assert_eq!(packed.seq.len(), total_len_in_bp.div_ceil(4) + 16,);
+    assert_eq!(packed.seq.len(), total_len_in_bp.div_ceil(4) + PADDING);
 }
 
 #[test]
