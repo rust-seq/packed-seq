@@ -521,8 +521,8 @@ where
         let mut buf = IT_BUF.with_borrow_mut(|v| RecycledBox(v.pop()));
         buf.init_if_needed();
 
-        let simd_char_mask: u32x8 = unsafe { core::mem::transmute([Self::CHAR_MASK as u32; 8]) };
-        let simd_b: u32x8 = unsafe { core::mem::transmute([B as u32; 8]) };
+        let simd_char_mask: u32x8 = S::splat(Self::CHAR_MASK as u32);
+        let simd_b: u32x8 = S::splat(B as u32);
 
         let par_len = if num_kmers == 0 {
             0
@@ -530,9 +530,9 @@ where
             n + context + o - 1
         };
 
-        let last_read = par_len.saturating_sub(1) / Self::C32 * Self::C32;
+        let last_i = par_len.saturating_sub(1) / Self::C32 * Self::C32;
         // Safety check for the `read_slice_32_unchecked`:
-        assert!(offsets[7] + (last_read / Self::C8) + 32 <= this.seq.len());
+        assert!(offsets[7] + (last_i / Self::C8) + 32 <= this.seq.len());
 
         let it = (0..par_len)
             .map(
@@ -544,8 +544,10 @@ where
                             let data: [u32x8; 8] = from_fn(
                                 #[inline(always)]
                                 |lane| unsafe {
-                                    let idx = offsets[lane] + (i / Self::C8);
-                                    read_slice_32_unchecked(this.seq, idx)
+                                    read_slice_32_unchecked(
+                                        this.seq,
+                                        offsets[lane] + (i / Self::C8),
+                                    )
                                 },
                             );
                             // *buf = transpose(data);
@@ -668,11 +670,19 @@ where
         // happen before the delay is actually reached.
         let mut read_idx = (buf_len - delay / Self::C32) % buf_len;
 
+        let simd_char_mask: u32x8 = S::splat(Self::CHAR_MASK as u32);
+        let simd_b: u32x8 = S::splat(B as u32);
+
         let par_len = if num_kmers == 0 {
             0
         } else {
             n + context + o - 1
         };
+
+        let last_i = par_len.saturating_sub(1) / Self::C32 * Self::C32;
+        // Safety check for the `read_slice_32_unchecked`:
+        assert!(offsets[7] + (last_i / Self::C8) + 32 <= this.seq.len());
+
         let it = (0..par_len)
             .map(
                 #[inline(always)]
@@ -682,7 +692,12 @@ where
                             // Read a u256 for each lane containing the next 128 characters.
                             let data: [u32x8; 8] = from_fn(
                                 #[inline(always)]
-                                |lane| read_slice_32(this.seq, offsets[lane] + (i / Self::C8)),
+                                |lane| unsafe {
+                                    read_slice_32_unchecked(
+                                        this.seq,
+                                        offsets[lane] + (i / Self::C8),
+                                    )
+                                },
                             );
                             unsafe {
                                 *TryInto::<&mut [u32x8; 8]>::try_into(
@@ -708,11 +723,11 @@ where
                         read_idx &= buf_mask;
                     }
                     // Extract the last 2 bits of each character.
-                    let chars = upcoming & S::splat(Self::CHAR_MASK as u32);
-                    let chars_d = upcoming_d & S::splat(Self::CHAR_MASK as u32);
+                    let chars = upcoming & simd_char_mask;
+                    let chars_d = upcoming_d & simd_char_mask;
                     // Shift remaining characters to the right.
-                    upcoming = upcoming >> S::splat(B as u32);
-                    upcoming_d = upcoming_d >> S::splat(B as u32);
+                    upcoming = upcoming >> simd_b;
+                    upcoming_d = upcoming_d >> simd_b;
                     (chars, chars_d)
                 },
             )
@@ -770,11 +785,19 @@ where
         let mut read_idx1 = (buf_len - delay1 / Self::C32) % buf_len;
         let mut read_idx2 = (buf_len - delay2 / Self::C32) % buf_len;
 
+        let simd_char_mask: u32x8 = S::splat(Self::CHAR_MASK as u32);
+        let simd_b: u32x8 = S::splat(B as u32);
+
         let par_len = if num_kmers == 0 {
             0
         } else {
             n + context + o - 1
         };
+
+        let last_i = par_len.saturating_sub(1) / Self::C32 * Self::C32;
+        // Safety check for the `read_slice_32_unchecked`:
+        assert!(offsets[7] + (last_i / Self::C8) + 32 <= this.seq.len());
+
         let it = (0..par_len)
             .map(
                 #[inline(always)]
@@ -784,7 +807,12 @@ where
                             // Read a u256 for each lane containing the next 128 characters.
                             let data: [u32x8; 8] = from_fn(
                                 #[inline(always)]
-                                |lane| read_slice_32(this.seq, offsets[lane] + (i / Self::C8)),
+                                |lane| unsafe {
+                                    read_slice_32_unchecked(
+                                        this.seq,
+                                        offsets[lane] + (i / Self::C8),
+                                    )
+                                },
                             );
                             unsafe {
                                 *TryInto::<&mut [u32x8; 8]>::try_into(
@@ -792,6 +820,7 @@ where
                                 )
                                 .unwrap_unchecked() = transpose(data);
                             }
+                            // FIXME DROP THIS?
                             if i == 0 {
                                 // Mask out chars before the offset.
                                 let elem = !((1u32 << (B * o)) - 1);
@@ -816,13 +845,13 @@ where
                         read_idx2 &= buf_mask;
                     }
                     // Extract the last 2 bits of each character.
-                    let chars = upcoming & S::splat(Self::CHAR_MASK as u32);
-                    let chars_d1 = upcoming_d1 & S::splat(Self::CHAR_MASK as u32);
-                    let chars_d2 = upcoming_d2 & S::splat(Self::CHAR_MASK as u32);
+                    let chars = upcoming & simd_char_mask;
+                    let chars_d1 = upcoming_d1 & simd_char_mask;
+                    let chars_d2 = upcoming_d2 & simd_char_mask;
                     // Shift remaining characters to the right.
-                    upcoming = upcoming >> S::splat(B as u32);
-                    upcoming_d1 = upcoming_d1 >> S::splat(B as u32);
-                    upcoming_d2 = upcoming_d2 >> S::splat(B as u32);
+                    upcoming = upcoming >> simd_b;
+                    upcoming_d1 = upcoming_d1 >> simd_b;
+                    upcoming_d2 = upcoming_d2 >> simd_b;
                     (chars, chars_d1, chars_d2)
                 },
             )
