@@ -1334,7 +1334,7 @@ impl<'s> PackedSeqBase<'s, 1> {
         let mut to_skip = o + skip;
         let mut i = 0;
         let lshift = S::splat(to_skip as u32);
-        let rshift = S::splat(32 - to_skip as u32);
+        let rshift = S::splat((32 - (to_skip % 32)) as u32);
         while to_skip > 0 {
             read(i, &mut cur);
             i += 32;
