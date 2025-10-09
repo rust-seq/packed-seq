@@ -995,7 +995,7 @@ fn par_iter_bp_bench() {
 #[test]
 #[ignore = "This is a benchmark, not a test"]
 fn par_iter_bp_delayed_bench() {
-    eprintln!("\nBench PackedSeq::par_iter_bp");
+    eprintln!("\nBench PackedSeq::par_iter_bp_delayed");
     for len in [100, 150, 200, 1000, 1_000_000] {
         // 1Gbp input.
         let rep = 1_000_000_000 / len;
