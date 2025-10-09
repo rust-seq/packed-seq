@@ -1295,14 +1295,14 @@ impl<'s> PackedSeqBase<'s, 1> {
         }
 
         #[inline(always)]
-        fn rotate_mask(mask: &mut [S; 4], r: u32) {
-            let carry01 = mask[0] >> S::splat(32 - r);
-            let carry12 = mask[1] >> S::splat(32 - r);
-            let carry23 = mask[2] >> S::splat(32 - r);
-            mask[0] = mask[0] << r;
-            mask[1] = (mask[1] << r) | carry01;
-            mask[2] = (mask[2] << r) | carry12;
-            mask[3] = (mask[3] << r) | carry23;
+        fn rotate_mask(mask: &mut [S; 4], lshift: &S, rshift: &S) {
+            let carry01 = mask[0] >> *rshift;
+            let carry12 = mask[1] >> *rshift;
+            let carry23 = mask[2] >> *rshift;
+            mask[0] = mask[0] << *lshift;
+            mask[1] = (mask[1] << *lshift) | carry01;
+            mask[2] = (mask[2] << *lshift) | carry12;
+            mask[3] = (mask[3] << *lshift) | carry23;
         }
 
         // Boxed, so it doesn't consume precious registers.
@@ -1333,6 +1333,8 @@ impl<'s> PackedSeqBase<'s, 1> {
         // Precompute the first o+skip iterations.
         let mut to_skip = o + skip;
         let mut i = 0;
+        let lshift = S::splat(to_skip as u32);
+        let rshift = S::splat(32 - to_skip as u32);
         while to_skip > 0 {
             read(i, &mut cur);
             i += 32;
@@ -1342,12 +1344,15 @@ impl<'s> PackedSeqBase<'s, 1> {
                 mask[0] = mask[1];
                 mask[1] = mask[2];
                 mask[2] = mask[3];
-                mask[3] = S::splat(0);
+                mask[3] = S::ZERO;
                 // rotate mask by remainder
-                rotate_mask(&mut mask, to_skip as u32);
+                rotate_mask(&mut mask, &lshift, &rshift);
                 break;
             }
         }
+
+        let lshift = S::ONE;
+        let rshift = S::splat(31);
 
         let it = (o + skip..par_len).map(
             #[inline(always)]
@@ -1357,12 +1362,12 @@ impl<'s> PackedSeqBase<'s, 1> {
                     mask[0] = mask[1];
                     mask[1] = mask[2];
                     mask[2] = mask[3];
-                    mask[3] = S::splat(0);
+                    mask[3] = S::ZERO;
                 }
 
-                rotate_mask(&mut mask, 1);
+                rotate_mask(&mut mask, &lshift, &rshift);
                 !((cur[0] & mask[0]) | (cur[1] & mask[1]) | (cur[2] & mask[2]) | (cur[3] & mask[3]))
-                    .cmp_eq(S::splat(0))
+                    .cmp_eq(S::ZERO)
             },
         );
 
