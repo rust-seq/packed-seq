@@ -976,18 +976,15 @@ fn par_iter_bp_bench() {
         let seq = PackedSeqVec::random(len);
 
         let start = std::time::Instant::now();
-        (0..rep).for_each(
-            #[inline(always)]
-            |_| {
-                let PaddedIt { it, .. } = seq.as_slice().par_iter_bp(1);
-                it.for_each(
-                    #[inline(always)]
-                    |y| {
-                        core::hint::black_box(&y);
-                    },
-                );
-            },
-        );
+        for _ in 0..rep {
+            let PaddedIt { it, .. } = seq.as_slice().par_iter_bp(1);
+            it.for_each(
+                #[inline(always)]
+                |y| {
+                    core::hint::black_box(&y);
+                },
+            );
+        }
         eprintln!(
             "Len {len:>7} => {:.03} Gbp/s",
             start.elapsed().as_secs_f64().recip()
@@ -1005,18 +1002,15 @@ fn par_iter_bp_delayed_bench() {
         let seq = PackedSeqVec::random(len);
 
         let start = std::time::Instant::now();
-        (0..rep).for_each(
-            #[inline(always)]
-            |_| {
-                let PaddedIt { it, .. } = seq.as_slice().par_iter_bp_delayed(1, Delay(27));
-                it.for_each(
-                    #[inline(always)]
-                    |y| {
-                        core::hint::black_box(&y);
-                    },
-                );
-            },
-        );
+        for _ in 0..rep {
+            let PaddedIt { it, .. } = seq.as_slice().par_iter_bp_delayed(1, Delay(27));
+            it.for_each(
+                #[inline(always)]
+                |y| {
+                    core::hint::black_box(&y);
+                },
+            );
+        }
         eprintln!(
             "Len {len:>7} => {:.03} Gbp/s",
             start.elapsed().as_secs_f64().recip()
@@ -1035,18 +1029,15 @@ fn par_iter_kmer_ambiguity_bench() {
         let seq = BitSeqVec::random(len, 0.01);
 
         let start = std::time::Instant::now();
-        (0..rep).for_each(
-            #[inline(always)]
-            |_| {
-                let PaddedIt { it, .. } = seq.as_slice().par_iter_kmer_ambiguity(k, k - 1, 0);
-                it.for_each(
-                    #[inline(always)]
-                    |y| {
-                        core::hint::black_box(&y);
-                    },
-                );
-            },
-        );
+        for _ in 0..rep {
+            let PaddedIt { it, .. } = seq.as_slice().par_iter_kmer_ambiguity(k, k - 1, 0);
+            it.for_each(
+                #[inline(always)]
+                |y| {
+                    core::hint::black_box(&y);
+                },
+            );
+        }
         eprintln!(
             "Len {len:>7} => {:.03} Gbp/s",
             start.elapsed().as_secs_f64().recip()
