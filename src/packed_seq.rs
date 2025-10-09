@@ -54,7 +54,7 @@ impl SupportedBits for Bits<4> {}
 impl SupportedBits for Bits<8> {}
 
 /// Number of padding bytes at the end of `PackedSeqVecBase::seq`.
-pub(crate) const PADDING: usize = 40;
+pub(crate) const PADDING: usize = 48;
 
 /// A 2-bit packed non-owned slice of DNA bases.
 #[doc(hidden)]
