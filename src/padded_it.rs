@@ -103,7 +103,7 @@ impl<I: ChunkIt<u32x8>> PaddedIt<I> {
         let len = it.len();
         out_vec.resize(len * 8, 0);
 
-        let mut m = [unsafe { transmute([0; 8]) }; 8];
+        let mut m = [u32x8::new([0; 8]); 8];
         let mut i = 0;
         it.for_each(|x| {
             m[i % 8] = x;
