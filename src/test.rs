@@ -1002,6 +1002,34 @@ fn par_iter_bp_bench() {
 
 #[test]
 #[ignore = "This is a benchmark, not a test"]
+fn par_iter_bp_buf_bench() {
+    eprintln!("\nBench PackedSeq::par_iter_bp_buf");
+
+    let mut buf = [S::ZERO; 8];
+
+    for len in [100, 150, 200, 1000, 1_000_000] {
+        // 1Gbp input.
+        let rep = 1_000_000_000 / len;
+        let seq = PackedSeqVec::random(len);
+
+        let start = std::time::Instant::now();
+        for _ in 0..rep {
+            let PaddedIt { it, .. } = seq.as_slice().par_iter_bp_with_buf(1, &mut buf);
+            let mut sum = S::ZERO;
+            for x in it {
+                sum += x;
+            }
+            black_box(&sum);
+        }
+        eprintln!(
+            "Len {len:>7} => {:.03} Gbp/s",
+            start.elapsed().as_secs_f64().recip()
+        );
+    }
+}
+
+#[test]
+#[ignore = "This is a benchmark, not a test"]
 fn par_iter_bp_delayed_bench() {
     eprintln!("\nBench PackedSeq::par_iter_bp_delayed");
     for len in [100, 150, 200, 1000, 1_000_000] {
