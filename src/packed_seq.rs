@@ -1249,128 +1249,22 @@ impl<'s> PackedSeqBase<'s, 1> {
         let o = this.offset;
         assert!(o < Self::C8);
 
-        let num_kmers = if this.len == 0 {
-            0
-        } else {
-            (this.len + o).saturating_sub(context - 1)
-        };
-        // without +o, since we don't need them in the stride.
-        let num_kmers_stride = this.len.saturating_sub(context - 1);
-        let n = num_kmers_stride.div_ceil(L).next_multiple_of(Self::C8);
-        let bytes_per_chunk = n / Self::C8;
-        let padding = Self::C8 * L * bytes_per_chunk - num_kmers_stride;
+        let delay = k - 1;
 
-        let offsets: [usize; 8] = from_fn(|l| l * bytes_per_chunk);
+        let it = self.par_iter_bp_delayed(context, Delay(delay));
 
-        //     prev2 prev    cur
-        //           0..31 | 32..63
-        // mask      00001111110000
-        // mask      00000111111000
-        // mask      00000011111100
-        // mask      00000001111110
-        // mask      00000000111111
-        //           cur     next
-        //           32..63| 64..95
-        // mask      11111100000000
+        let mut cnt = u32x8::ZERO;
 
-        // [prev2, prev, cur]
-        let mut cur = [S::ZERO; 4];
-        let mut mask = [S::ZERO; 4];
-        match k {
-            1..=32 => {
-                mask[3] = (S::MAX) << S::splat(32 - k as u32);
-            }
-            33..=64 => {
-                mask[3] = S::MAX;
-                mask[2] = (S::MAX) << S::splat(64 - k as u32);
-            }
-            65..=96 => {
-                mask[3] = S::MAX;
-                mask[2] = S::MAX;
-                mask[1] = (S::MAX) << S::splat(96 - k as u32);
-            }
-            _ => unreachable!(),
-        }
-
-        #[inline(always)]
-        fn rotate_mask(mask: &mut [S; 4], lshift: &S, rshift: &S) {
-            let carry01 = mask[0] >> *rshift;
-            let carry12 = mask[1] >> *rshift;
-            let carry23 = mask[2] >> *rshift;
-            mask[0] = mask[0] << *lshift;
-            mask[1] = (mask[1] << *lshift) | carry01;
-            mask[2] = (mask[2] << *lshift) | carry12;
-            mask[3] = (mask[3] << *lshift) | carry23;
-        }
-
-        // Boxed, so it doesn't consume precious registers.
-        // Without this, cur is not always inlined into a register.
-        let mut buf = IT_BUF.with_borrow_mut(|v| RecycledBox(v.pop()));
-        buf.init_if_needed();
-
-        // We skip the first o iterations.
-        let par_len = if num_kmers == 0 { 0 } else { n + k + o - 1 };
-
-        let mut read = {
+        it.map(
             #[inline(always)]
-            move |i: usize, cur: &mut [S; 4]| {
-                if i % Self::C256 == 0 {
-                    // Read a u256 for each lane containing the next 128 characters.
-                    let data: [u32x8; 8] = from_fn(
-                        #[inline(always)]
-                        |lane| read_slice_32(this.seq, offsets[lane] + (i / Self::C8)),
-                    );
-                    *buf.get_mut() = transpose(data);
-                }
-                cur[0] = cur[1];
-                cur[1] = cur[2];
-                cur[2] = cur[3];
-                cur[3] = buf.get()[(i % Self::C256) / Self::C32];
-            }
-        };
-
-        // Precompute the first o+skip iterations.
-        let mut to_skip = o + skip;
-        let mut i = 0;
-        let lshift = S::splat(to_skip as u32);
-        let rshift = S::splat((32 - (to_skip % 32)) as u32);
-        while to_skip > 0 {
-            read(i, &mut cur);
-            i += 32;
-            if to_skip >= 32 {
-                to_skip -= 32;
-            } else {
-                mask[0] = mask[1];
-                mask[1] = mask[2];
-                mask[2] = mask[3];
-                mask[3] = S::ZERO;
-                // rotate mask by remainder
-                rotate_mask(&mut mask, &lshift, &rshift);
-                break;
-            }
-        }
-
-        let lshift = S::ONE;
-        let rshift = S::splat(31);
-
-        let it = (o + skip..par_len).map(
-            #[inline(always)]
-            move |i| {
-                if i % Self::C32 == 0 {
-                    read(i, &mut cur);
-                    mask[0] = mask[1];
-                    mask[1] = mask[2];
-                    mask[2] = mask[3];
-                    mask[3] = S::ZERO;
-                }
-
-                rotate_mask(&mut mask, &lshift, &rshift);
-                !((cur[0] & mask[0]) | (cur[1] & mask[1]) | (cur[2] & mask[2]) | (cur[3] & mask[3]))
-                    .cmp_eq(S::ZERO)
+            move |(a, r)| {
+                cnt += a;
+                let out = cnt.cmp_gt(S::ZERO);
+                cnt -= r;
+                out
             },
-        );
-
-        PaddedIt { it, padding }
+        )
+        .advance(skip)
     }
 }
 
