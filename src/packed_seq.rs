@@ -620,6 +620,83 @@ where
     Bits<B>: SupportedBits,
 {
     #[inline(always)]
+    pub fn par_iter_bp_with_buf<'x>(
+        self,
+        context: usize,
+        buf: &'x mut [S; 8],
+    ) -> PaddedIt<impl ChunkIt<S> + use<'x, 's, B>> {
+        #[cfg(target_endian = "big")]
+        panic!("Big endian architectures are not supported.");
+
+        let this = self.normalize();
+        let o = this.offset;
+        assert!(o < Self::C8);
+
+        let num_kmers = if this.len == 0 {
+            0
+        } else {
+            (this.len + o).saturating_sub(context - 1)
+        };
+        // without +o, since we don't need them in the stride.
+        let num_kmers_stride = this.len.saturating_sub(context - 1);
+        let n = num_kmers_stride.div_ceil(L).next_multiple_of(Self::C8);
+        let bytes_per_chunk = n / Self::C8;
+        let padding = Self::C8 * L * bytes_per_chunk - num_kmers_stride;
+
+        let offsets: [usize; 8] = from_fn(|l| l * bytes_per_chunk);
+        let mut cur = S::ZERO;
+
+        // Boxed, so it doesn't consume precious registers.
+        // Without this, cur is not always inlined into a register.
+        // let mut buf = IT_BUF.with_borrow_mut(|v| RecycledBox(v.pop()));
+        // buf.init_if_needed();
+
+        let simd_char_mask: u32x8 = S::splat(Self::CHAR_MASK as u32);
+        let simd_b: u32x8 = S::splat(B as u32);
+
+        let par_len = if num_kmers == 0 {
+            0
+        } else {
+            n + context + o - 1
+        };
+
+        let last_i = par_len.saturating_sub(1) / Self::C32 * Self::C32;
+        // Safety check for the `read_slice_32_unchecked`:
+        assert!(offsets[7] + (last_i / Self::C8) + 32 <= this.seq.len());
+
+        let it = (0..par_len)
+            .map(
+                #[inline(always)]
+                move |i| {
+                    if i % Self::C32 == 0 {
+                        if i % Self::C256 == 0 {
+                            // Read a u256 for each lane containing the next 128 characters.
+                            let data: [u32x8; 8] = from_fn(
+                                #[inline(always)]
+                                |lane| unsafe {
+                                    read_slice_32_unchecked(
+                                        this.seq,
+                                        offsets[lane] + (i / Self::C8),
+                                    )
+                                },
+                            );
+                            *buf = transpose(data);
+                        }
+                        cur = buf[(i % Self::C256) / Self::C32];
+                    }
+                    // Extract the last 2 bits of each character.
+                    let chars = cur & simd_char_mask;
+                    // Shift remaining characters to the right.
+                    cur = cur >> simd_b;
+                    chars
+                },
+            )
+            .advance(o);
+
+        PaddedIt { it, padding }
+    }
+
+    #[inline(always)]
     pub fn par_iter_bp_delayed_with_factor(
         self,
         context: usize,
