@@ -53,29 +53,6 @@ fn pack_via_ascii() {
 }
 
 #[test]
-#[ignore = "This is a benchmark, not a test"]
-fn pack_word_bench() {
-    let n = 10000000;
-    let x = vec![b'A'; n];
-    let packed = PackedSeqVec::from_ascii(&x);
-    for k in 1..=32 {
-        let start = std::time::Instant::now();
-        let mut sum = 0;
-        for i in 0..=(x.len() - k) {
-            let word = packed.read_kmer(k, i);
-            sum += word;
-        }
-        std::hint::black_box(sum);
-        let d = start.elapsed();
-        eprintln!(
-            "PackedSeqVec::read_kmer({k}) took {} ms or {} ns per k-mer",
-            d.as_millis(),
-            d.as_nanos() as f32 / (x.len() - k + 1) as f32
-        );
-    }
-}
-
-#[test]
 fn pack_word() {
     let packed = PackedSeqVec::from_ascii(b"ACGTACGTACGTACGTACGTACGTACGTACGTACGT");
     let slice = packed.slice(0..1);
@@ -906,6 +883,36 @@ fn iter_ambiguity() {
                 .collect();
             assert_eq!(naive, simd, "k={k} len={len}");
         }
+    }
+}
+
+#[test]
+#[ignore = "This is a benchmark, not a test"]
+fn read_kmer_bench() {
+    eprintln!("\nBench PackedSeq::read_kmer");
+    for len in [100, 150, 200, 1000, 1_000_000] {
+        let x = vec![b'A'; len];
+        let packed = PackedSeqVec::from_ascii(&x);
+        let mut out = vec![];
+        for k in 1..=32 {
+            let start = std::time::Instant::now();
+            let mut sum = 0;
+            for i in 0..=(x.len() - k) {
+                let word = packed.read_kmer(k, i);
+                sum += word;
+            }
+            std::hint::black_box(sum);
+            let d = start.elapsed();
+            let ns_each = d.as_nanos() as f32 / (x.len() - k + 1) as f32;
+            out.push(ns_each);
+        }
+        let mut s = String::new();
+        s += &format!("Len {len:>7} => ");
+        for x in out {
+            s += &format!("{x:>4.2} ");
+        }
+        s += &format!("ns/kmer");
+        eprintln!("{s}");
     }
 }
 
