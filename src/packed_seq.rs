@@ -6,41 +6,66 @@ use crate::{intrinsics::transpose, padded_it::ChunkIt};
 
 use super::*;
 
-type SimdBuf = [S; 8];
-
 thread_local! {
-    static IT_BUF: RefCell<Vec<Box<SimdBuf>>> = {
-        RefCell::new(vec![Box::new(SimdBuf::default())])
+    static IT_BUF: RefCell<Vec<Vec<S>>> = {
+        RefCell::new(vec![])
     };
 }
 
-struct RecycledBox(Option<Box<SimdBuf>>);
+struct RecycledBox(Vec<S>);
 
 impl RecycledBox {
     #[inline(always)]
-    pub fn init_if_needed(&mut self) {
-        if self.0.is_none() {
-            self.0 = Some(Box::new(SimdBuf::default()));
+    pub fn new(len: usize) -> Self {
+        let buf = IT_BUF.with_borrow_mut(
+            #[inline(always)]
+            |v| match v.pop() {
+                Some(mut x) => {
+                    x.resize(len, S::ZERO);
+                    x
+                }
+                None => vec![S::ZERO; len],
+            },
+        );
+        Self(buf)
+    }
+
+    #[inline(always)]
+    pub fn new_and_clear(len: usize) -> Self {
+        let mut buf = IT_BUF
+            .with_borrow_mut(
+                #[inline(always)]
+                |v| v.pop(),
+            )
+            .unwrap_or_default();
+        buf.clear();
+        buf.resize(len, S::ZERO);
+        Self(buf)
+    }
+
+    #[inline(always)]
+    pub fn get(&self) -> &[S] {
+        &self.0
+    }
+
+    #[inline(always)]
+    pub unsafe fn get_mut(&mut self, idx: usize) -> &mut [S; 8] {
+        unsafe {
+            self.0
+                .get_unchecked_mut(idx..idx + 8)
+                .try_into()
+                .unwrap_unchecked()
         }
-    }
-
-    #[inline(always)]
-    pub fn get(&self) -> &SimdBuf {
-        unsafe { self.0.as_ref().unwrap_unchecked() }
-    }
-
-    #[inline(always)]
-    pub fn get_mut(&mut self) -> &mut SimdBuf {
-        unsafe { self.0.as_mut().unwrap_unchecked() }
     }
 }
 
 impl Drop for RecycledBox {
     #[inline(always)]
     fn drop(&mut self) {
-        let mut x = None;
-        core::mem::swap(&mut x, &mut self.0);
-        IT_BUF.with_borrow_mut(|v| v.push(unsafe { x.unwrap_unchecked() }));
+        IT_BUF.with_borrow_mut(
+            #[inline(always)]
+            |v| v.push(std::mem::take(&mut self.0)),
+        );
     }
 }
 
@@ -518,8 +543,7 @@ where
 
         // Boxed, so it doesn't consume precious registers.
         // Without this, cur is not always inlined into a register.
-        let mut buf = IT_BUF.with_borrow_mut(|v| RecycledBox(v.pop()));
-        buf.init_if_needed();
+        let mut buf = RecycledBox::new(8);
 
         let simd_char_mask: u32x8 = S::splat(Self::CHAR_MASK as u32);
         let simd_b: u32x8 = S::splat(B as u32);
@@ -550,7 +574,9 @@ where
                                     )
                                 },
                             );
-                            *buf.get_mut() = transpose(data);
+                            unsafe {
+                                *buf.get_mut(0) = transpose(data);
+                            }
                         }
                         cur = buf.get()[(i % Self::C256) / Self::C32];
                     }
@@ -662,7 +688,9 @@ where
         // +8: some 'random' padding
         let buf_len = (delay / Self::C32 + 8).next_power_of_two();
         let buf_mask = buf_len - 1;
-        let mut buf = vec![S::ZERO; buf_len];
+
+        let mut buf = RecycledBox::new_and_clear(buf_len);
+
         let mut write_idx = 0;
         // We compensate for the first delay/16 triggers of the check below that
         // happen before the delay is actually reached.
@@ -698,25 +726,25 @@ where
                                 },
                             );
                             unsafe {
-                                *TryInto::<&mut [u32x8; 8]>::try_into(
-                                    buf.get_unchecked_mut(write_idx..write_idx + 8),
-                                )
-                                .unwrap_unchecked() = transpose(data);
+                                *buf.get_mut(write_idx) = transpose(data);
                             }
+                            // FIXME drop?
                             if i == 0 {
                                 // Mask out chars before the offset.
                                 let elem = !((1u32 << (B * o)) - 1);
                                 let mask = S::splat(elem);
-                                buf[write_idx] &= mask;
+                                unsafe {
+                                    buf.get_mut(write_idx)[0] &= mask;
+                                }
                             }
                         }
-                        upcoming = buf[write_idx];
+                        upcoming = buf.get()[write_idx];
                         write_idx += 1;
                         write_idx &= buf_mask;
                     }
                     if i % Self::C32 == delay % Self::C32 {
-                        unsafe { assert_unchecked(read_idx < buf.len()) };
-                        upcoming_d = buf[read_idx];
+                        unsafe { assert_unchecked(read_idx < buf.get().len()) };
+                        upcoming_d = buf.get()[read_idx];
                         read_idx += 1;
                         read_idx &= buf_mask;
                     }
@@ -776,7 +804,9 @@ where
         // Even buf_len is nice to only have the write==buf_len check once.
         let buf_len = (delay2 / Self::C32 + 8).next_power_of_two();
         let buf_mask = buf_len - 1;
-        let mut buf = vec![S::ZERO; buf_len];
+
+        let mut buf = RecycledBox::new_and_clear(buf_len);
+
         let mut write_idx = 0;
         // We compensate for the first delay/16 triggers of the check below that
         // happen before the delay is actually reached.
@@ -813,32 +843,31 @@ where
                                 },
                             );
                             unsafe {
-                                *TryInto::<&mut [u32x8; 8]>::try_into(
-                                    buf.get_unchecked_mut(write_idx..write_idx + 8),
-                                )
-                                .unwrap_unchecked() = transpose(data);
+                                *buf.get_mut(write_idx) = transpose(data);
                             }
                             // FIXME DROP THIS?
                             if i == 0 {
                                 // Mask out chars before the offset.
                                 let elem = !((1u32 << (B * o)) - 1);
                                 let mask = S::splat(elem);
-                                buf[write_idx] &= mask;
+                                unsafe {
+                                    buf.get_mut(write_idx)[0] &= mask;
+                                }
                             }
                         }
-                        upcoming = buf[write_idx];
+                        upcoming = buf.get()[write_idx];
                         write_idx += 1;
                         write_idx &= buf_mask;
                     }
                     if i % Self::C32 == delay1 % Self::C32 {
-                        unsafe { assert_unchecked(read_idx1 < buf.len()) };
-                        upcoming_d1 = buf[read_idx1];
+                        unsafe { assert_unchecked(read_idx1 < buf.get().len()) };
+                        upcoming_d1 = buf.get()[read_idx1];
                         read_idx1 += 1;
                         read_idx1 &= buf_mask;
                     }
                     if i % Self::C32 == delay2 % Self::C32 {
-                        unsafe { assert_unchecked(read_idx2 < buf.len()) };
-                        upcoming_d2 = buf[read_idx2];
+                        unsafe { assert_unchecked(read_idx2 < buf.get().len()) };
+                        upcoming_d2 = buf.get()[read_idx2];
                         read_idx2 += 1;
                         read_idx2 &= buf_mask;
                     }
