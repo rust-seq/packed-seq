@@ -60,6 +60,23 @@ impl Drop for RecycledBox {
     }
 }
 
+#[derive(Default)]
+struct SimdVec(Vec<S>);
+
+impl Deref for SimdVec {
+    type Target = Vec<S>;
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl DerefMut for SimdVec {
+    #[inline(always)]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
 #[doc(hidden)]
 pub struct Bits<const B: usize>;
 #[doc(hidden)]
@@ -532,7 +549,13 @@ where
         delay1: Delay,
         delay2: Delay,
     ) -> PaddedIt<impl ChunkIt<(S, S, S)>> {
-        self.par_iter_bp_delayed_2_with_factor(context, delay1, delay2, 1)
+        self.par_iter_bp_delayed_2_with_factor_and_buf(
+            context,
+            delay1,
+            delay2,
+            1,
+            SimdVec::default(),
+        )
     }
 
     /// Compares 29 characters at a time.
@@ -647,9 +670,30 @@ where
     pub fn par_iter_bp_delayed_with_factor(
         self,
         context: usize,
-        Delay(delay): Delay,
+        delay: Delay,
         factor: usize,
     ) -> PaddedIt<impl ChunkIt<(S, S)> + use<'s, B>> {
+        self.par_iter_bp_delayed_with_factor_and_buf(context, delay, factor, SimdVec::default())
+    }
+
+    #[inline(always)]
+    pub fn par_iter_bp_delayed_with_buf<BUF: DerefMut<Target = Vec<S>>>(
+        self,
+        context: usize,
+        delay: Delay,
+        buf: BUF,
+    ) -> PaddedIt<impl ChunkIt<(S, S)> + use<'s, B, BUF>> {
+        self.par_iter_bp_delayed_with_factor_and_buf(context, delay, 1, buf)
+    }
+
+    #[inline(always)]
+    pub fn par_iter_bp_delayed_with_factor_and_buf<BUF: DerefMut<Target = Vec<S>>>(
+        self,
+        context: usize,
+        Delay(delay): Delay,
+        factor: usize,
+        mut buf: BUF,
+    ) -> PaddedIt<impl ChunkIt<(S, S)> + use<'s, B, BUF>> {
         #[cfg(target_endian = "big")]
         panic!("Big endian architectures are not supported.");
 
@@ -686,7 +730,14 @@ where
         // +8: some 'random' padding
         let buf_len = (delay / Self::C32 + 8).next_power_of_two();
         let buf_mask = buf_len - 1;
-        let mut buf = vec![S::ZERO; buf_len];
+        if buf.len() != buf_len {
+            // This has better codegen than `vec.clear(); vec.resize()`, since the inner `do_reserve_and_handle` of resize is not inlined.
+            *buf.as_mut() = vec![S::ZERO; buf_len];
+        } else {
+            // NOTE: Buf needs to be filled with zeros to guarantee returning 0 values for out-of-bounds characters.
+            buf.fill(S::ZERO);
+        }
+
         let mut write_idx = 0;
         // We compensate for the first delay/16 triggers of the check below that
         // happen before the delay is actually reached.
@@ -758,19 +809,48 @@ where
         PaddedIt { it, padding }
     }
 
+    #[inline(always)]
+    pub fn par_iter_bp_delayed_2_with_factor(
+        self,
+        context: usize,
+        delay1: Delay,
+        delay2: Delay,
+        factor: usize,
+    ) -> PaddedIt<impl ChunkIt<(S, S, S)> + use<'s, B>> {
+        self.par_iter_bp_delayed_2_with_factor_and_buf(
+            context,
+            delay1,
+            delay2,
+            factor,
+            SimdVec::default(),
+        )
+    }
+
+    #[inline(always)]
+    pub fn par_iter_bp_delayed_2_with_buf<BUF: DerefMut<Target = Vec<S>>>(
+        self,
+        context: usize,
+        delay1: Delay,
+        delay2: Delay,
+        buf: BUF,
+    ) -> PaddedIt<impl ChunkIt<(S, S, S)> + use<'s, B, BUF>> {
+        self.par_iter_bp_delayed_2_with_factor_and_buf(context, delay1, delay2, 1, buf)
+    }
+
     /// When iterating over 2-bit and 1-bit encoded data in parallel,
     /// one must ensure that they have the same stride.
     /// On the larger type, set `factor` as the ratio to the smaller one,
     /// so that the stride in bytes is a multiple of `factor`,
     /// so that the smaller type also has a byte-aligned stride.
     #[inline(always)]
-    pub fn par_iter_bp_delayed_2_with_factor(
+    pub fn par_iter_bp_delayed_2_with_factor_and_buf<BUF: DerefMut<Target = Vec<S>>>(
         self,
         context: usize,
         Delay(delay1): Delay,
         Delay(delay2): Delay,
         factor: usize,
-    ) -> PaddedIt<impl ChunkIt<(S, S, S)> + use<'s, B>> {
+        mut buf: BUF,
+    ) -> PaddedIt<impl ChunkIt<(S, S, S)> + use<'s, B, BUF>> {
         #[cfg(target_endian = "big")]
         panic!("Big endian architectures are not supported.");
 
@@ -800,7 +880,14 @@ where
         // Even buf_len is nice to only have the write==buf_len check once.
         let buf_len = (delay2 / Self::C32 + 8).next_power_of_two();
         let buf_mask = buf_len - 1;
-        let mut buf = vec![S::ZERO; buf_len];
+        if buf.len() != buf_len {
+            // This has better codegen than `vec.clear(); vec.resize()`, since the inner `do_reserve_and_handle` of resize is not inlined.
+            *buf = vec![S::ZERO; buf_len];
+        } else {
+            // NOTE: Buf needs to be filled with zeros to guarantee returning 0 values for out-of-bounds characters.
+            buf.fill(S::ZERO);
+        }
+
         let mut write_idx = 0;
         // We compensate for the first delay/16 triggers of the check below that
         // happen before the delay is actually reached.

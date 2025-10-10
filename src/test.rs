@@ -1055,6 +1055,32 @@ fn par_iter_bp_delayed_bench() {
 
 #[test]
 #[ignore = "This is a benchmark, not a test"]
+fn par_iter_bp_delayed_buf_bench() {
+    eprintln!("\nBench PackedSeq::par_iter_bp_delayed_buf");
+
+    let mut buf = vec![];
+
+    for len in [100, 150, 200, 1000, 1_000_000] {
+        // 1Gbp input.
+        let rep = 1_000_000_000 / len;
+        let seq = PackedSeqVec::random(len);
+
+        let start = std::time::Instant::now();
+        for _ in 0..rep {
+            let PaddedIt { it, .. } =
+                seq.as_slice()
+                    .par_iter_bp_delayed_with_factor_and_buf(1, Delay(27), 1, &mut buf);
+            black_box(it.map(|(x, y)| x + y).sum::<u32x8>());
+        }
+        eprintln!(
+            "Len {len:>7} => {:.03} Gbp/s",
+            start.elapsed().as_secs_f64().recip()
+        );
+    }
+}
+
+#[test]
+#[ignore = "This is a benchmark, not a test"]
 fn par_iter_kmer_ambiguity_bench() {
     eprintln!("\nBench PackedSeq::par_iter_kmer_ambiguity");
     let k = 31;
