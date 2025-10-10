@@ -517,7 +517,6 @@ where
 
         // Boxed, so it doesn't consume precious registers.
         // Without this, cur is not always inlined into a register.
-        // let mut buf = Box::new([S::ZERO; 8]);
         let mut buf = IT_BUF.with_borrow_mut(|v| RecycledBox(v.pop()));
         buf.init_if_needed();
 
@@ -550,10 +549,8 @@ where
                                     )
                                 },
                             );
-                            // *buf = transpose(data);
                             *buf.get_mut() = transpose(data);
                         }
-                        // cur = buf[(i % Self::C256) / Self::C32];
                         cur = buf.get()[(i % Self::C256) / Self::C32];
                     }
                     // Extract the last 2 bits of each character.
@@ -1307,7 +1304,8 @@ impl<'s> PackedSeqBase<'s, 1> {
 
         // Boxed, so it doesn't consume precious registers.
         // Without this, cur is not always inlined into a register.
-        let mut buf = Box::new([S::ZERO; 8]);
+        let mut buf = IT_BUF.with_borrow_mut(|v| RecycledBox(v.pop()));
+        buf.init_if_needed();
 
         // We skip the first o iterations.
         let par_len = if num_kmers == 0 { 0 } else { n + k + o - 1 };
@@ -1321,12 +1319,12 @@ impl<'s> PackedSeqBase<'s, 1> {
                         #[inline(always)]
                         |lane| read_slice_32(this.seq, offsets[lane] + (i / Self::C8)),
                     );
-                    *buf = transpose(data);
+                    *buf.get_mut() = transpose(data);
                 }
                 cur[0] = cur[1];
                 cur[1] = cur[2];
                 cur[2] = cur[3];
-                cur[3] = buf[(i % Self::C256) / Self::C32];
+                cur[3] = buf.get()[(i % Self::C256) / Self::C32];
             }
         };
 
