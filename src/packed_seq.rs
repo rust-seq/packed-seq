@@ -185,7 +185,8 @@ pub const fn complement_base(base: u8) -> u8 {
 /// Complement 8 lanes of 2-bit bases: `0<>2` and `1<>3`.
 #[inline(always)]
 pub fn complement_base_simd(base: u32x8) -> u32x8 {
-    base ^ u32x8::splat(2)
+    const TWO: u32x8 = u32x8::new([2; 8]);
+    base ^ TWO
 }
 
 /// Reverse complement the 2-bit pairs in the input.
