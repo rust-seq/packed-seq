@@ -22,6 +22,11 @@ epserde = { version = "0.8", optional = true }
 
 # Optional pyclass atrributes for some objects.
 pyo3 = { version = "0.25", features = ["extension-module"], optional = true }
+tick_counter = "0.4.5"
+gungraun = "0.17.0"
+
+[dev-dependencies]
+iai = { git = "https://github.com/sigaloid/iai", rev = "6c83e942" }
 
 [features]
 # Also needed for tests.
@@ -29,3 +34,15 @@ default = ["rand"]
 
 # Hides the `simd` warnings when neither AVX2 nor NEON is detected.
 scalar = []
+
+[profile.release]
+debug = true
+
+
+[[bench]]
+name="bench_iai"
+harness=false
+
+[[bench]]
+name="bench_gg"
+harness=false
