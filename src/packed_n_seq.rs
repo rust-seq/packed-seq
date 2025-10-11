@@ -24,6 +24,13 @@ impl<'s> PackedNSeq<'s> {
             ambiguous: self.ambiguous.to_revcomp(),
         }
     }
+
+    pub fn slice(&self, range: Range<usize>) -> PackedNSeq<'s> {
+        PackedNSeq {
+            seq: self.seq.slice(range.clone()),
+            ambiguous: self.ambiguous.slice(range),
+        }
+    }
 }
 
 /// Implement a subset of `SeqVec` for `PackedNSeqVec`.
@@ -46,9 +53,15 @@ impl PackedNSeqVec {
         }
     }
 
-    pub fn push_ascii(&mut self, seq: &[u8]) {
-        self.seq.push_ascii(seq);
-        self.ambiguous.push_ascii(seq);
+    pub fn slice(&self, range: Range<usize>) -> PackedNSeq<'_> {
+        self.as_slice().slice(range).to_owned()
+    }
+
+    pub fn push_ascii(&mut self, seq: &[u8]) -> Range<usize> {
+        let r1 = self.seq.push_ascii(seq);
+        let r2 = self.ambiguous.push_ascii(seq);
+        assert_eq!(r1, r2);
+        r1
     }
 
     pub fn from_ascii(seq: &[u8]) -> Self {
