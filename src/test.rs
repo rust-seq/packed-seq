@@ -1,3 +1,5 @@
+use std::hint::black_box;
+
 use rand::{Rng, random_range};
 use wide::u32x8;
 
@@ -935,7 +937,7 @@ fn push_ascii_1bit_bench() {
         let start = std::time::Instant::now();
         for _ in 0..rep {
             packed.push_ascii(&ascii.seq);
-            core::hint::black_box(&packed);
+            black_box(&packed);
             packed.clear();
         }
         eprintln!(
@@ -963,7 +965,7 @@ fn push_ascii_2bit_bench() {
         let start = std::time::Instant::now();
         for _ in 0..rep {
             packed.push_ascii(&ascii.seq);
-            core::hint::black_box(&packed);
+            black_box(&packed);
             packed.clear();
         }
         eprintln!(
@@ -985,12 +987,11 @@ fn par_iter_bp_bench() {
         let start = std::time::Instant::now();
         for _ in 0..rep {
             let PaddedIt { it, .. } = seq.as_slice().par_iter_bp(1);
-            it.for_each(
-                #[inline(always)]
-                |y| {
-                    core::hint::black_box(&y);
-                },
-            );
+            let mut sum = S::ZERO;
+            for x in it {
+                sum += x;
+            }
+            black_box(&sum);
         }
         eprintln!(
             "Len {len:>7} => {:.03} Gbp/s",
@@ -1011,12 +1012,11 @@ fn par_iter_bp_delayed_bench() {
         let start = std::time::Instant::now();
         for _ in 0..rep {
             let PaddedIt { it, .. } = seq.as_slice().par_iter_bp_delayed(1, Delay(27));
-            it.for_each(
-                #[inline(always)]
-                |y| {
-                    core::hint::black_box(&y);
-                },
-            );
+            let mut sum = S::ZERO;
+            for x in it {
+                sum += x.0 + x.1;
+            }
+            black_box(sum);
         }
         eprintln!(
             "Len {len:>7} => {:.03} Gbp/s",
@@ -1038,12 +1038,11 @@ fn par_iter_kmer_ambiguity_bench() {
         let start = std::time::Instant::now();
         for _ in 0..rep {
             let PaddedIt { it, .. } = seq.as_slice().par_iter_kmer_ambiguity(k, k - 1, 0);
-            it.for_each(
-                #[inline(always)]
-                |y| {
-                    core::hint::black_box(&y);
-                },
-            );
+            let mut sum = S::ZERO;
+            for x in it {
+                sum += x;
+            }
+            black_box(&sum);
         }
         eprintln!(
             "Len {len:>7} => {:.03} Gbp/s",
