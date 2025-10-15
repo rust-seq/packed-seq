@@ -9,29 +9,36 @@ use super::*;
 
 type SimdBuf = [S; 8];
 
+struct RecycledBox(Option<Box<SimdBuf>>);
+
 thread_local! {
-    static IT_BUF: RefCell<Vec<Box<SimdBuf>>> = {
+    static RECYCLED_BOX_CACHE: RefCell<Vec<Box<SimdBuf>>> = {
         RefCell::new(vec![Box::new(SimdBuf::default())])
     };
 }
 
-struct RecycledBox(Option<Box<SimdBuf>>);
-
 impl RecycledBox {
     #[inline(always)]
-    pub fn init_if_needed(&mut self) {
+    fn take() -> Self {
+        let mut buf = RECYCLED_BOX_CACHE.with_borrow_mut(|v| RecycledBox(v.pop()));
+        buf.init_if_needed();
+        buf
+    }
+
+    #[inline(always)]
+    fn init_if_needed(&mut self) {
         if self.0.is_none() {
             self.0 = Some(Box::new(SimdBuf::default()));
         }
     }
 
     #[inline(always)]
-    pub fn get(&self) -> &SimdBuf {
+    fn get(&self) -> &SimdBuf {
         unsafe { self.0.as_ref().unwrap_unchecked() }
     }
 
     #[inline(always)]
-    pub fn get_mut(&mut self) -> &mut SimdBuf {
+    fn get_mut(&mut self) -> &mut SimdBuf {
         unsafe { self.0.as_mut().unwrap_unchecked() }
     }
 }
@@ -56,24 +63,42 @@ impl Drop for RecycledBox {
     fn drop(&mut self) {
         let mut x = None;
         core::mem::swap(&mut x, &mut self.0);
-        IT_BUF.with_borrow_mut(|v| v.push(unsafe { x.unwrap_unchecked() }));
+        RECYCLED_BOX_CACHE.with_borrow_mut(|v| v.push(unsafe { x.unwrap_unchecked() }));
     }
 }
 
-#[derive(Default)]
-struct SimdVec(Vec<S>);
+struct RecycledVec(Vec<S>);
 
-impl Deref for SimdVec {
+thread_local! {
+    static RECYCLED_VEC_CACHE: RefCell<Vec<Vec<S>>> = {
+        RefCell::new(vec![])
+    };
+}
+
+impl RecycledVec {
+    #[inline(always)]
+    fn take() -> Self {
+        RecycledVec(RECYCLED_VEC_CACHE.with_borrow_mut(|v| v.pop().unwrap_or_default()))
+    }
+}
+
+impl Deref for RecycledVec {
     type Target = Vec<S>;
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
-impl DerefMut for SimdVec {
+impl DerefMut for RecycledVec {
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
+    }
+}
+impl Drop for RecycledVec {
+    #[inline(always)]
+    fn drop(&mut self) {
+        RECYCLED_VEC_CACHE.with_borrow_mut(|v| v.push(std::mem::take(&mut self.0)));
     }
 }
 
@@ -528,11 +553,7 @@ where
 
     #[inline(always)]
     fn par_iter_bp(self, context: usize) -> PaddedIt<impl ChunkIt<S>> {
-        // Boxed, so it doesn't consume precious registers.
-        // Without this, cur is not always inlined into a register.
-        let mut buf = IT_BUF.with_borrow_mut(|v| RecycledBox(v.pop()));
-        buf.init_if_needed();
-        self.par_iter_bp_with_buf(context, buf)
+        self.par_iter_bp_with_buf(context, RecycledBox::take())
     }
 
     #[inline(always)]
@@ -554,7 +575,7 @@ where
             delay1,
             delay2,
             1,
-            SimdVec::default(),
+            RecycledVec::take(),
         )
     }
 
@@ -673,7 +694,7 @@ where
         delay: Delay,
         factor: usize,
     ) -> PaddedIt<impl ChunkIt<(S, S)> + use<'s, B>> {
-        self.par_iter_bp_delayed_with_factor_and_buf(context, delay, factor, SimdVec::default())
+        self.par_iter_bp_delayed_with_factor_and_buf(context, delay, factor, RecycledVec::take())
     }
 
     #[inline(always)]
@@ -822,7 +843,7 @@ where
             delay1,
             delay2,
             factor,
-            SimdVec::default(),
+            RecycledVec::take(),
         )
     }
 
