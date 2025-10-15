@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.2.0
+- Perf: improve NEON codegen by avoiding `u32x8::splat`.
+- Perf: reuse thread-local allocations between invocations
+- Feat: `par_iter_bp_*_with_buf` versions that allow passing in buffers from the
+  stack, which can be slightly faster than thread-locals.
+- Perf: all `PackedSeq` slices have padding to allow faster out-of-bounds reading.
+- Perf: Rewrite `par_iter_kmer_ambiguity` to use a delayed iterator.
+- Feat: Add `PackedNSeq::slice(Range<usize>)` utility.
+
 ## 4.1.1
 - Feat: `PackedNSeqVec::{default,clear,push_ascii}`.
 - Feat: `BitSeqVec::par_iter_kmer_ambiguity` supports `k` up to `96`.
