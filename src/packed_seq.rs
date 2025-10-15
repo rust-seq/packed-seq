@@ -799,9 +799,11 @@ where
                                 // Mask out chars before the offset.
                                 let elem = !((1u32 << (B * o)) - 1);
                                 let mask = S::splat(elem);
+                                unsafe { assert_unchecked(write_idx < buf.len()) };
                                 buf[write_idx] &= mask;
                             }
                         }
+                        unsafe { assert_unchecked(write_idx < buf.len()) };
                         upcoming = buf[write_idx];
                         write_idx += 1;
                         write_idx &= buf_mask;
