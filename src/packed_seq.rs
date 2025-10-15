@@ -160,6 +160,8 @@ where
 {
     /// lowest B bits are 1.
     const CHAR_MASK: u64 = (1 << B) - 1;
+    const SIMD_B: S = S::new([B as u32; 8]);
+    const SIMD_CHAR_MASK: S = S::new([(1 << B) - 1; 8]);
     /// Chars per byte
     const C8: usize = 8 / B;
     /// Chars per u32
@@ -642,9 +644,6 @@ where
         let offsets: [usize; 8] = from_fn(|l| l * bytes_per_chunk);
         let mut cur = S::ZERO;
 
-        let simd_char_mask: u32x8 = S::splat(Self::CHAR_MASK as u32);
-        let simd_b: u32x8 = S::splat(B as u32);
-
         let par_len = if num_kmers == 0 {
             0
         } else {
@@ -676,9 +675,9 @@ where
                         cur = buf[(i % Self::C256) / Self::C32];
                     }
                     // Extract the last 2 bits of each character.
-                    let chars = cur & simd_char_mask;
+                    let chars = cur & Self::SIMD_CHAR_MASK;
                     // Shift remaining characters to the right.
-                    cur = cur >> simd_b;
+                    cur = cur >> Self::SIMD_B;
                     chars
                 },
             )
@@ -764,9 +763,6 @@ where
         // happen before the delay is actually reached.
         let mut read_idx = (buf_len - delay / Self::C32) % buf_len;
 
-        let simd_char_mask: u32x8 = S::splat(Self::CHAR_MASK as u32);
-        let simd_b: u32x8 = S::splat(B as u32);
-
         let par_len = if num_kmers == 0 {
             0
         } else {
@@ -817,11 +813,11 @@ where
                         read_idx &= buf_mask;
                     }
                     // Extract the last 2 bits of each character.
-                    let chars = upcoming & simd_char_mask;
-                    let chars_d = upcoming_d & simd_char_mask;
+                    let chars = upcoming & Self::SIMD_CHAR_MASK;
+                    let chars_d = upcoming_d & Self::SIMD_CHAR_MASK;
                     // Shift remaining characters to the right.
-                    upcoming = upcoming >> simd_b;
-                    upcoming_d = upcoming_d >> simd_b;
+                    upcoming = upcoming >> Self::SIMD_B;
+                    upcoming_d = upcoming_d >> Self::SIMD_B;
                     (chars, chars_d)
                 },
             )
@@ -915,9 +911,6 @@ where
         let mut read_idx1 = (buf_len - delay1 / Self::C32) % buf_len;
         let mut read_idx2 = (buf_len - delay2 / Self::C32) % buf_len;
 
-        let simd_char_mask: u32x8 = S::splat(Self::CHAR_MASK as u32);
-        let simd_b: u32x8 = S::splat(B as u32);
-
         let par_len = if num_kmers == 0 {
             0
         } else {
@@ -975,13 +968,13 @@ where
                         read_idx2 &= buf_mask;
                     }
                     // Extract the last 2 bits of each character.
-                    let chars = upcoming & simd_char_mask;
-                    let chars_d1 = upcoming_d1 & simd_char_mask;
-                    let chars_d2 = upcoming_d2 & simd_char_mask;
+                    let chars = upcoming & Self::SIMD_CHAR_MASK;
+                    let chars_d1 = upcoming_d1 & Self::SIMD_CHAR_MASK;
+                    let chars_d2 = upcoming_d2 & Self::SIMD_CHAR_MASK;
                     // Shift remaining characters to the right.
-                    upcoming = upcoming >> simd_b;
-                    upcoming_d1 = upcoming_d1 >> simd_b;
-                    upcoming_d2 = upcoming_d2 >> simd_b;
+                    upcoming = upcoming >> Self::SIMD_B;
+                    upcoming_d1 = upcoming_d1 >> Self::SIMD_B;
+                    upcoming_d2 = upcoming_d2 >> Self::SIMD_B;
                     (chars, chars_d1, chars_d2)
                 },
             )
