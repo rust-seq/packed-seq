@@ -1395,6 +1395,42 @@ impl<'s> PackedSeqBase<'s, 1> {
         )
         .advance(skip)
     }
+
+    #[inline(always)]
+    pub fn par_iter_kmer_ambiguity_with_buf(
+        self,
+        k: usize,
+        context: usize,
+        skip: usize,
+        buf: &'s mut Vec<S>,
+    ) -> PaddedIt<impl ChunkIt<S> + use<'s>> {
+        #[cfg(target_endian = "big")]
+        panic!("Big endian architectures are not supported.");
+
+        assert!(k > 0, "par_iter_kmers requires k>0, but k={k}");
+        assert!(k <= 96, "par_iter_kmers requires k<=96, but k={k}");
+
+        let this = self.normalize();
+        let o = this.offset;
+        assert!(o < Self::C8);
+
+        let delay = k - 1;
+
+        let it = self.par_iter_bp_delayed_with_buf(context, Delay(delay), buf);
+
+        let mut cnt = u32x8::ZERO;
+
+        it.map(
+            #[inline(always)]
+            move |(a, r)| {
+                cnt += a;
+                let out = cnt.cmp_gt(S::ZERO);
+                cnt -= r;
+                out
+            },
+        )
+        .advance(skip)
+    }
 }
 
 #[cfg(target_feature = "neon")]
