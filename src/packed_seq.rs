@@ -750,12 +750,13 @@ where
         // +8: some 'random' padding
         let buf_len = (delay / Self::C32 + 8).next_power_of_two();
         let buf_mask = buf_len - 1;
-        if buf.len() != buf_len {
+        if buf.capacity() < buf_len {
             // This has better codegen than `vec.clear(); vec.resize()`, since the inner `do_reserve_and_handle` of resize is not inlined.
-            *buf.as_mut() = vec![S::ZERO; buf_len];
+            *buf = vec![S::ZERO; buf_len];
         } else {
             // NOTE: Buf needs to be filled with zeros to guarantee returning 0 values for out-of-bounds characters.
-            buf.fill(S::ZERO);
+            buf.clear();
+            buf.resize(buf_len, S::ZERO);
         }
 
         let mut write_idx = 0;
@@ -899,12 +900,13 @@ where
         // Even buf_len is nice to only have the write==buf_len check once.
         let buf_len = (delay2 / Self::C32 + 8).next_power_of_two();
         let buf_mask = buf_len - 1;
-        if buf.len() != buf_len {
+        if buf.capacity() < buf_len {
             // This has better codegen than `vec.clear(); vec.resize()`, since the inner `do_reserve_and_handle` of resize is not inlined.
             *buf = vec![S::ZERO; buf_len];
         } else {
             // NOTE: Buf needs to be filled with zeros to guarantee returning 0 values for out-of-bounds characters.
-            buf.fill(S::ZERO);
+            buf.clear();
+            buf.resize(buf_len, S::ZERO);
         }
 
         let mut write_idx = 0;
