@@ -893,6 +893,7 @@ fn iter_ambiguity() {
 fn read_kmer_bench() {
     eprintln!("\nBench PackedSeq::read_kmer");
     for len in [100, 150, 200, 1000, 1_000_000] {
+        let len = black_box(len);
         let x = vec![b'A'; len];
         let packed = PackedSeqVec::from_ascii(&x);
         let mut out = vec![];
@@ -926,6 +927,7 @@ fn push_ascii_1bit_bench() {
     let mut packed = BitSeqVec::default();
 
     for len in [100, 150, 200, 1000, 1_000_000] {
+        let len = black_box(len);
         // 1Gbp input.
         let rep = 1_000_000_000 / len;
         let mut ascii = AsciiSeqVec::random(len);
@@ -954,6 +956,7 @@ fn push_ascii_2bit_bench() {
     let mut packed = PackedSeqVec::default();
 
     for len in [100, 150, 200, 1000, 1_000_000] {
+        let len = black_box(len);
         // 1Gbp input.
         let rep = 1_000_000_000 / len;
         let mut ascii = AsciiSeqVec::random(len);
@@ -980,6 +983,7 @@ fn push_ascii_2bit_bench() {
 fn par_iter_bp_bench() {
     eprintln!("\nBench PackedSeq::par_iter_bp");
     for len in [100, 150, 200, 1000, 1_000_000] {
+        let len = black_box(len);
         // 1Gbp input.
         let rep = 1_000_000_000 / len;
         let seq = PackedSeqVec::random(len);
@@ -1008,6 +1012,7 @@ fn par_iter_bp_buf_bench() {
     let mut buf = [S::ZERO; 8];
 
     for len in [100, 150, 200, 1000, 1_000_000] {
+        let len = black_box(len);
         // 1Gbp input.
         let rep = 1_000_000_000 / len;
         let seq = PackedSeqVec::random(len);
@@ -1032,25 +1037,25 @@ fn par_iter_bp_buf_bench() {
 #[ignore = "This is a benchmark, not a test"]
 fn par_iter_bp_delayed_bench() {
     eprintln!("\nBench PackedSeq::par_iter_bp_delayed");
+    let delay = black_box(Delay(27));
+    let mut sum = S::ZERO;
     for len in [100, 150, 200, 1000, 1_000_000] {
+        let len = black_box(len);
         // 1Gbp input.
         let rep = 1_000_000_000 / len;
         let seq = PackedSeqVec::random(len);
 
         let start = std::time::Instant::now();
         for _ in 0..rep {
-            let PaddedIt { it, .. } = seq.as_slice().par_iter_bp_delayed(1, Delay(27));
-            let mut sum = S::ZERO;
-            for x in it {
-                sum += x.0 + x.1;
-            }
-            black_box(sum);
+            let PaddedIt { it, .. } = seq.as_slice().par_iter_bp_delayed(1, delay);
+            it.for_each(|x| sum += x.0 + x.1);
         }
         eprintln!(
             "Len {len:>7} => {:.03} Gbp/s",
             start.elapsed().as_secs_f64().recip()
         );
     }
+    black_box(&sum);
 }
 
 #[test]
@@ -1060,17 +1065,21 @@ fn par_iter_bp_delayed_buf_bench() {
 
     let mut buf = vec![];
 
+    let delay = black_box(Delay(27));
     for len in [100, 150, 200, 1000, 1_000_000] {
+        let len = black_box(len);
         // 1Gbp input.
         let rep = 1_000_000_000 / len;
         let seq = PackedSeqVec::random(len);
 
         let start = std::time::Instant::now();
         for _ in 0..rep {
-            let PaddedIt { it, .. } =
-                seq.as_slice()
-                    .par_iter_bp_delayed_with_factor_and_buf(1, Delay(27), 1, &mut buf);
-            black_box(it.map(|(x, y)| x + y).sum::<u32x8>());
+            let PaddedIt { it, .. } = seq
+                .as_slice()
+                .par_iter_bp_delayed_with_factor_and_buf(1, delay, 1, &mut buf);
+            let mut sum = S::ZERO;
+            it.for_each(|x| sum += x.0 + x.1);
+            black_box(sum);
         }
         eprintln!(
             "Len {len:>7} => {:.03} Gbp/s",
@@ -1084,7 +1093,9 @@ fn par_iter_bp_delayed_buf_bench() {
 fn par_iter_kmer_ambiguity_bench() {
     eprintln!("\nBench PackedSeq::par_iter_kmer_ambiguity");
     let k = 31;
+    let mut sum = S::ZERO;
     for len in [100, 150, 200, 1000, 1_000_000] {
+        let len = black_box(len);
         // 1Gbp input.
         let rep = 1_000_000_000 / len;
         let seq = BitSeqVec::random(len, 0.01);
@@ -1092,15 +1103,14 @@ fn par_iter_kmer_ambiguity_bench() {
         let start = std::time::Instant::now();
         for _ in 0..rep {
             let PaddedIt { it, .. } = seq.as_slice().par_iter_kmer_ambiguity(k, k - 1, 0);
-            let mut sum = S::ZERO;
             for x in it {
                 sum += x;
             }
-            black_box(&sum);
         }
         eprintln!(
             "Len {len:>7} => {:.03} Gbp/s",
             start.elapsed().as_secs_f64().recip()
         );
     }
+    black_box(&sum);
 }
