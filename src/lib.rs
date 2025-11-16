@@ -142,9 +142,9 @@ pub use ascii_seq::{AsciiSeq, AsciiSeqVec};
 pub use packed_n_seq::{PackedNSeq, PackedNSeqVec};
 pub use packed_seq::{BitSeq, BitSeqVec, PackedSeq, PackedSeqVec};
 pub use packed_seq::{
-    complement_base, complement_base_simd, complement_char, pack_char, unpack_base, unpack_kmer,
-    unpack_kmer_into_vec, unpack_kmer_to_vec, unpack_kmer_u128, unpack_kmer_u128_into_vec,
-    unpack_kmer_u128_to_vec,
+    complement_base, complement_base_simd, complement_char, pack_char, pack_kmer_lossy,
+    pack_kmer_u128_lossy, unpack_base, unpack_kmer, unpack_kmer_into_vec, unpack_kmer_to_vec,
+    unpack_kmer_u128, unpack_kmer_u128_into_vec, unpack_kmer_u128_to_vec,
 };
 pub use padded_it::{Advance, ChunkIt, PaddedIt};
 pub use traits::{Delay, Seq, SeqVec};

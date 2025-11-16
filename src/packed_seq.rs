@@ -216,6 +216,25 @@ pub fn pack_char(base: u8) -> u8 {
 pub fn pack_char_lossy(base: u8) -> u8 {
     (base >> 1) & 3
 }
+/// Pack a slice of ASCII `ACTGactg` characters into its packed 2-bit kmer representation.
+/// Other characters are silently converted.
+#[inline(always)]
+pub fn pack_kmer_lossy(slice: &[u8]) -> u64 {
+    let mut kmer = 0;
+    for (i, &base) in slice.iter().enumerate() {
+        kmer |= (pack_char_lossy(base) as u64) << (2 * i);
+    }
+    kmer
+}
+/// Pack a slice of ASCII `ACTGactg` characters into its packed 2-bit kmer representation.
+#[inline(always)]
+pub fn pack_kmer_u128_lossy(slice: &[u8]) -> u128 {
+    let mut kmer = 0;
+    for (i, &base) in slice.iter().enumerate() {
+        kmer |= (pack_char_lossy(base) as u128) << (2 * i);
+    }
+    kmer
+}
 
 /// Unpack a 2-bit DNA base into the corresponding `ACTG` character.
 #[inline(always)]
