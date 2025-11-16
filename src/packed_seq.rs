@@ -224,6 +224,46 @@ pub fn unpack_base(base: u8) -> u8 {
     b"ACTG"[base as usize]
 }
 
+/// Unpack a 2-bit encoded kmer into corresponding `ACTG` characters.
+/// Slice the returned array to the correct length.
+#[inline(always)]
+pub fn unpack_kmer(kmer: u64) -> [u8; 32] {
+    std::array::from_fn(|i| unpack_base(((kmer >> (2 * i)) & 3) as u8))
+}
+/// Unpack a 2-bit encoded kmer into corresponding `ACTG` character.
+#[inline(always)]
+pub fn unpack_kmer_into_vec(kmer: u64, k: usize, out: &mut Vec<u8>) {
+    out.clear();
+    out.extend((0..k).map(|i| unpack_base(((kmer >> (2 * i)) & 3) as u8)));
+}
+/// Unpack a 2-bit encoded kmer into corresponding `ACTG` character.
+#[inline(always)]
+pub fn unpack_kmer_to_vec(kmer: u64, k: usize) -> Vec<u8> {
+    let mut out = vec![];
+    unpack_kmer_into_vec(kmer, k, &mut out);
+    out
+}
+
+/// Unpack a 2-bit encoded kmer into corresponding `ACTG` characters.
+/// Slice the returned array to the correct length.
+#[inline(always)]
+pub fn unpack_kmer_u128(kmer: u128) -> [u8; 64] {
+    std::array::from_fn(|i| unpack_base(((kmer >> (2 * i)) & 3) as u8))
+}
+/// Unpack a 2-bit encoded kmer into corresponding `ACTG` character.
+#[inline(always)]
+pub fn unpack_kmer_u128_into_vec(kmer: u128, k: usize, out: &mut Vec<u8>) {
+    out.clear();
+    out.extend((0..k).map(|i| unpack_base(((kmer >> (2 * i)) & 3) as u8)));
+}
+/// Unpack a 2-bit encoded kmer into corresponding `ACTG` character.
+#[inline(always)]
+pub fn unpack_kmer_u128_to_vec(kmer: u128, k: usize) -> Vec<u8> {
+    let mut out = vec![];
+    unpack_kmer_u128_into_vec(kmer, k, &mut out);
+    out
+}
+
 /// Complement an ASCII character: `A<>T` and `C<>G`.
 #[inline(always)]
 pub const fn complement_char(base: u8) -> u8 {
