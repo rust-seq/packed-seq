@@ -13,6 +13,7 @@ description = "Constructing and iterating packed DNA sequences using SIMD"
 wide = "0.7"
 mem_dbg = "0.3"
 cfg-if = "1.0"
+ensure_simd = "0.1.0"
 
 # Optional generate random sequences for testing. (Default enabled.)
 rand = { version = "0.9", features = ["small_rng"], optional = true }
@@ -28,4 +29,4 @@ pyo3 = { version = "0.25", features = ["extension-module"], optional = true }
 default = ["rand"]
 
 # Hides the `simd` warnings when neither AVX2 nor NEON is detected.
-scalar = []
+scalar = ["ensure_simd/scalar"]

@@ -1,5 +1,8 @@
 # Changelog
 
+## Upcoming
+- switch to `ensure_simd`
+
 ## 4.2.0
 - Perf: improve NEON codegen by avoiding `u32x8::splat`.
 - Perf: reuse thread-local allocations between invocations
