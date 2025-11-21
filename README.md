@@ -21,7 +21,7 @@ crate was developed:
   Ragnar Groot Koerkamp, Igor Martayan.
   SEA 2025 [https://doi.org/10.4230/LIPIcs.SEA.2025.20](doi.org/10.4230/LIPIcs.SEA.2025.20)
 
-## Installation
+## Requirements
 
 This library requires AVX2 or NEON instruction sets, which, on x64, requires
 either `target-cpu=native` or `target-cpu=x86-64-v3`.
