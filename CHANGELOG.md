@@ -1,6 +1,8 @@
 # Changelog
 
-## Upcoming
+## 4.3.0
+- Add `unpack_kmer_to_vec(kmer: u64, k) -> Vec` and variants.
+- Add `pack_kmer_lossy(kmer: &[u8]) -> u64` and variants.
 - switch to `ensure_simd`
 
 ## 4.2.0
