@@ -10,7 +10,7 @@ use crate::{BitSeqVec, PackedNSeqVec, PackedSeqVec, SeqVec};
 #[cfg_attr(feature = "epserde", derive(epserde::Epserde))]
 pub struct PackedEfNSeqVec {
     seq: PackedSeqVec,
-    ef_ambiguous: EliasFano,
+    ef_ambiguous: Option<EliasFano>,
 }
 
 impl PackedEfNSeqVec {
@@ -23,6 +23,14 @@ impl PackedEfNSeqVec {
         for byte in tail {
             cnt += byte.count_ones();
         }
+
+        if cnt == 0 {
+            return Self {
+                seq: n_seq.seq,
+                ef_ambiguous: None,
+            };
+        }
+
         let mut ef_builder = EliasFanoBuilder::new(cnt as usize, n_seq.seq.seq.len() as usize);
         let mut pos = 0;
         for mut byte in n_seq.ambiguous.seq {
@@ -35,13 +43,15 @@ impl PackedEfNSeqVec {
         }
         Self {
             seq: n_seq.seq,
-            ef_ambiguous: ef_builder.build(),
+            ef_ambiguous: Some(ef_builder.build()),
         }
     }
     pub fn into_packed_n_seq_vec(self) -> PackedNSeqVec {
         let mut ambiguous = BitSeqVec::with_len(self.seq.len());
-        for pos in self.ef_ambiguous.iter() {
-            ambiguous.seq[pos / 8] |= 1 << (pos % 8);
+        if let Some(ef_ambiguous) = self.ef_ambiguous {
+            for pos in ef_ambiguous.iter() {
+                ambiguous.seq[pos / 8] |= 1 << (pos % 8);
+            }
         }
         PackedNSeqVec {
             seq: self.seq,
