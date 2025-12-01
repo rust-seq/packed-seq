@@ -119,6 +119,7 @@ mod packed_n_seq;
 mod packed_seq;
 mod padded_it;
 
+pub mod packed_ef_n_seq;
 #[cfg(test)]
 mod test;
 

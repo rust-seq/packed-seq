@@ -23,6 +23,7 @@ epserde = { version = "0.8", optional = true }
 
 # Optional pyclass atrributes for some objects.
 pyo3 = { version = "0.25", features = ["extension-module"], optional = true }
+sux = "0.10.2"
 
 [features]
 # Also needed for tests.
