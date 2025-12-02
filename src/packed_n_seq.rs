@@ -102,4 +102,36 @@ impl PackedNSeqVec {
             ambiguous,
         }
     }
+
+    /// Create a mask that is 1 for all non-ACGT bases and for all low-quality bases with quality `<threshold`.
+    pub fn push_from_ascii_and_quality(&mut self, seq: &[u8], quality: &[u8], threshold: usize) {
+        let r = self.seq.push_ascii(seq);
+        let r2 = self.ambiguous.push_ascii(seq);
+        assert_eq!(r, r2);
+
+        assert_eq!(seq.len(), quality.len());
+
+        // Low-quality bases are also ambiguous.
+        let t = b'!' + threshold as u8;
+        let t_simd = i8x32::splat(t as i8);
+
+        let mut idx = r2.start;
+        let mut i = 0;
+        while idx % 8 != 0 {
+            self.ambiguous.seq[idx / 8] |= ((quality[i] < t) as u8) << (idx % 8);
+            idx += 1;
+            i += 1;
+        }
+        let quality = &quality[i..];
+
+        let ambiguous = self.ambiguous.seq[idx / 8..].as_chunks_mut::<4>().0;
+        for i in (0..quality.len()).step_by(32) {
+            let chunk =
+                i8x32::from(unsafe { std::mem::transmute::<_, i8x32>(read_slice_32(quality, i)) });
+
+            let mask = t_simd.cmp_lt(chunk).move_mask() as u32;
+            let ambi = &mut ambiguous[i / 32];
+            *ambi = (u32::from_ne_bytes(*ambi) | mask).to_ne_bytes();
+        }
+    }
 }
