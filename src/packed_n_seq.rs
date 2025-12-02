@@ -1,3 +1,7 @@
+use wide::{CmpLt, i8x32};
+
+use crate::packed_seq::read_slice_32;
+
 use super::*;
 
 #[derive(Clone, Copy, Debug, MemSize, MemDbg)]
@@ -68,6 +72,34 @@ impl PackedNSeqVec {
         Self {
             seq: PackedSeqVec::from_ascii(seq),
             ambiguous: BitSeqVec::from_ascii(seq),
+        }
+    }
+
+    /// Create a mask that is 1 for all non-ACGT bases and for all low-quality bases with quality `<threshold`.
+    pub fn from_ascii_and_quality(seq: &[u8], quality: &[u8], threshold: usize) -> Self {
+        assert_eq!(seq.len(), quality.len());
+
+        let mut ambiguous = BitSeqVec::from_ascii(seq);
+
+        // Low-quality bases are also ambiguous.
+        {
+            let t = (b'!' + threshold as u8) as i8;
+            let t_simd = i8x32::splat(t);
+            let ambiguous = ambiguous.seq.as_chunks_mut::<4>().0;
+            for i in (0..quality.len()).step_by(32) {
+                let chunk = i8x32::from(unsafe {
+                    std::mem::transmute::<_, i8x32>(read_slice_32(quality, i))
+                });
+
+                let mask = t_simd.cmp_lt(chunk).move_mask() as u32;
+                let ambi = &mut ambiguous[i / 32];
+                *ambi = (u32::from_ne_bytes(*ambi) | mask).to_ne_bytes();
+            }
+        }
+
+        Self {
+            seq: PackedSeqVec::from_ascii(seq),
+            ambiguous,
         }
     }
 }
