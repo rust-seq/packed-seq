@@ -104,7 +104,7 @@ impl PackedNSeqVec {
     }
 
     /// Create a mask that is 1 for all non-ACGT bases and for all low-quality bases with quality `<threshold`.
-    pub fn push_from_ascii_and_quality(&mut self, seq: &[u8], quality: &[u8], threshold: usize) {
+    pub fn push_from_ascii_and_quality(&mut self, seq: &[u8], quality: &[u8], min_qual: u8) {
         let r = self.seq.push_ascii(seq);
         let r2 = self.ambiguous.push_ascii(seq);
         assert_eq!(r, r2);
@@ -112,7 +112,7 @@ impl PackedNSeqVec {
         assert_eq!(seq.len(), quality.len());
 
         // Low-quality bases are also ambiguous.
-        let t = b'!' + threshold as u8;
+        let t = b'!' + min_qual;
         let t_simd = i8x32::splat(t as i8);
 
         let mut idx = r2.start;
