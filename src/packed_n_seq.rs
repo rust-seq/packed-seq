@@ -135,35 +135,62 @@ impl PackedNSeqVec {
         }
     }
 
+    /// Read a fasta/fastq file at the given path into a `PackedNSeq`, separating records with `N`.
     #[cfg(feature = "file_io")]
-    pub fn from_fastq_with_quality(path: &std::path::Path, min_qual: u8) -> Self {
-        let mut dna = vec![];
-        let mut qual = vec![];
+    pub fn from_fastx(path: &std::path::Path) -> Self {
+        let mut ascii = Vec::with_capacity(16000);
 
-        let mut seqs = Self::default();
+        let mut seq = Self::default();
 
         let mut reader = needletail::parse_fastx_file(&path).unwrap();
         while let Some(record) = reader.next() {
             let seqrec = record.expect("Invalid FASTA/Q record");
-            dna.extend_from_slice(&seqrec.seq());
+            ascii.extend_from_slice(&seqrec.seq());
+            ascii.push(b'N');
+
+            // Convert from ascii dna to packed dna+mask in batches of 16kbp.
+            if ascii.len() > 16000 {
+                seq.push_ascii(&ascii);
+                ascii.clear();
+            }
+        }
+
+        if ascii.len() > 0 {
+            seq.push_ascii(&ascii);
+        }
+
+        seq
+    }
+
+    /// Read a fasta/fastq file at the given path into a `PackedNSeq`, separating records with `N`.
+    /// Low-quality bases are masked out.
+    #[cfg(feature = "file_io")]
+    pub fn from_fastq_with_quality(path: &std::path::Path, min_qual: u8) -> Self {
+        let mut ascii = vec![];
+        let mut qual = vec![];
+
+        let mut seq = Self::default();
+
+        let mut reader = needletail::parse_fastx_file(&path).unwrap();
+        while let Some(record) = reader.next() {
+            let seqrec = record.expect("Invalid FASTA/Q record");
+            ascii.extend_from_slice(&seqrec.seq());
             qual.extend_from_slice(&seqrec.qual().unwrap());
-            dna.push(b'N');
+            ascii.push(b'N');
             qual.push(0);
 
             // Convert from ascii dna+qual to packed dna+mask in batches of 16kbp.
-            if dna.len() > 16000 {
-                seqs.push_from_ascii_and_quality(&dna, &qual, min_qual);
-                dna.clear();
+            if ascii.len() > 16000 {
+                seq.push_from_ascii_and_quality(&ascii, &qual, min_qual);
+                ascii.clear();
                 qual.clear();
             }
         }
 
-        if dna.len() > 0 {
-            seqs.push_from_ascii_and_quality(&dna, &qual, min_qual);
-            dna.clear();
-            qual.clear();
+        if ascii.len() > 0 {
+            seq.push_from_ascii_and_quality(&ascii, &qual, min_qual);
         }
 
-        seqs
+        seq
     }
 }
