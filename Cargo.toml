@@ -24,10 +24,16 @@ epserde = { version = "0.8", optional = true }
 # Optional pyclass atrributes for some objects.
 pyo3 = { version = "0.25", features = ["extension-module"], optional = true }
 sux = "0.10.2"
+# Optional, for reading PackedSeq[N]Vec directly from a file
+needletail = { version = "0.6.3", optional = true }
 
 [features]
 # Also needed for tests.
-default = ["rand"]
+default = ["rand", "file_io"]
+
+# Enables functions to read PackedNSeq directly from a file.
+file_io = ["needletail"]
 
 # Hides the `simd` warnings when neither AVX2 nor NEON is detected.
 scalar = ["ensure_simd/scalar"]
+

@@ -134,4 +134,36 @@ impl PackedNSeqVec {
             *ambi = (u32::from_ne_bytes(*ambi) | mask).to_ne_bytes();
         }
     }
+
+    #[cfg(feature = "file_io")]
+    pub fn from_fastq_with_quality(path: &std::path::Path, min_qual: u8) -> Self {
+        let mut dna = vec![];
+        let mut qual = vec![];
+
+        let mut seqs = Self::default();
+
+        let mut reader = needletail::parse_fastx_file(&path).unwrap();
+        while let Some(record) = reader.next() {
+            let seqrec = record.expect("Invalid FASTA/Q record");
+            dna.extend_from_slice(&seqrec.seq());
+            qual.extend_from_slice(&seqrec.qual().unwrap());
+            dna.push(b'N');
+            qual.push(0);
+
+            // Convert from ascii dna+qual to packed dna+mask in batches of 16kbp.
+            if dna.len() > 16000 {
+                seqs.push_from_ascii_and_quality(&dna, &qual, min_qual);
+                dna.clear();
+                qual.clear();
+            }
+        }
+
+        if dna.len() > 0 {
+            seqs.push_from_ascii_and_quality(&dna, &qual, min_qual);
+            dna.clear();
+            qual.clear();
+        }
+
+        seqs
+    }
 }
