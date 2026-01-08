@@ -138,7 +138,7 @@ pub struct PackedSeqVecBase<const B: usize>
 where
     Bits<B>: SupportedBits,
 {
-    /// NOTE: We maintain the invariant that this has at least 16 bytes padding
+    /// NOTE: We maintain the invariant that this has at least 48 bytes of padding
     /// at the end after `len` finishes.
     /// This ensures that `read_unaligned` in `as_64` works OK.
     pub(crate) seq: Vec<u8>,
@@ -369,10 +369,19 @@ pub const fn rev_u128(word: u128, len: usize) -> u128 {
 
 // ======================================================================
 
-impl<const B: usize> PackedSeqBase<'_, B>
+impl<'s, const B: usize> PackedSeqBase<'s, B>
 where
     Bits<B>: SupportedBits,
 {
+    /// Creates a `Seq` from a slice of packed bytes, an offset in bp and a length in bp.
+    ///
+    /// The slice should have at least 48 bytes of padding after `offset + len`.
+    /// Otherwise, the function will panic.
+    pub fn from_raw_parts(seq: &'s [u8], offset: usize, len: usize) -> Self {
+        assert!(offset + len + PADDING * Self::C8 <= seq.len() * Self::C8);
+        Self { seq, offset, len }
+    }
+
     /// Shrink `seq` to only just cover the data.
     #[inline(always)]
     pub fn normalize(&self) -> Self {
@@ -467,7 +476,7 @@ where
         let mask = u64::MAX >> (64 - B * self.len());
 
         // The unaligned read is OK, because we ensure that the underlying `PackedSeqVecBase::seq` always
-        // has at least 16 bytes (the size of a u128) of padding at the end.
+        // has at least 48 bytes of padding at the end.
         if self.len() <= Self::K64 {
             let x = unsafe { (self.seq.as_ptr() as *const u64).read_unaligned() };
             (x >> (B * self.offset)) & mask
@@ -500,7 +509,7 @@ where
         let mask = u128::MAX >> (128 - B * self.len());
 
         // The unaligned read is OK, because we ensure that the underlying `PackedSeqVecBase::seq` always
-        // has at least 16 bytes (the size of a u128) of padding at the end.
+        // has at least 48 bytes of padding at the end.
         let x = unsafe { (self.seq.as_ptr() as *const u128).read_unaligned() };
         (x >> (B * self.offset)) & mask
     }
@@ -1377,7 +1386,7 @@ where
 {
     /// Creates a `SeqVec` from a vector of packed bytes and a length in bp.
     ///
-    /// The vector should have at least 16 bytes of padding after `len`.
+    /// The vector should have at least 48 bytes of padding after `len`.
     /// Otherwise, the vector will be resized to be padded with zeros.
     pub fn from_raw_parts(mut seq: Vec<u8>, len: usize) -> Self {
         assert!(len <= seq.len() * Self::C8);
