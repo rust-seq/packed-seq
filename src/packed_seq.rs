@@ -1371,6 +1371,21 @@ where
     }
 }
 
+impl<const B: usize> PackedSeqVecBase<B>
+where
+    Bits<B>: SupportedBits,
+{
+    /// Creates a `SeqVec` from a vector of packed bytes and a length in bp.
+    ///
+    /// The vector should have at least 16 bytes of padding after `len`.
+    /// Otherwise, the vector will be resized to be padded with zeros.
+    pub fn from_raw_parts(mut seq: Vec<u8>, len: usize) -> Self {
+        assert!(len <= seq.len() * Self::C8);
+        seq.resize(len.div_ceil(Self::C8) + PADDING, 0);
+        Self { seq, len }
+    }
+}
+
 impl PackedSeqVecBase<1> {
     pub fn with_len(n: usize) -> Self {
         Self {
