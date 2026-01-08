@@ -1,5 +1,13 @@
 # Changelog
 
+## 4.4.0
+- Add `PackedSeq{Vec}Base::from_raw_parts` to construct directly from a `Vec` or slice.
+- Add `PackedNSeqVec::from_ascii_and_quality` that masks out low-quality bases.
+- Add `PackedNSeqVec::from_{fastx,fastq_with_quality}` behind `file_io` feature
+  (for `needletail` dependency).
+- Add experimental `PackedEfNSeq` that stores `N` positions in an EF vector,
+  behind `ef_seq` feature flag (for `sux` dependency).
+
 ## 4.3.0
 - Add `unpack_kmer_to_vec(kmer: u64, k) -> Vec` and variants.
 - Add `pack_kmer_lossy(kmer: &[u8]) -> u64` and variants.
