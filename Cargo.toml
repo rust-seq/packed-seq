@@ -39,3 +39,7 @@ ef_seq = ["sux"]
 # Hides the `simd` warnings when neither AVX2 nor NEON is detected.
 scalar = ["ensure_simd/scalar"]
 
+
+[package.metadata.docs.rs]
+# Features to pass to Cargo
+features = ['rand', 'file_io', 'ef_seq']
