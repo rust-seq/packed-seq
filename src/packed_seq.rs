@@ -114,8 +114,7 @@ impl SupportedBits for Bits<8> {}
 /// Number of padding bytes at the end of `PackedSeqVecBase::seq`.
 pub(crate) const PADDING: usize = 48;
 
-/// A 2-bit packed non-owned slice of DNA bases.
-#[doc(hidden)]
+/// A variable-bit-width packed non-owned slice of DNA bases.
 #[derive(Copy, Clone, Debug, MemSize, MemDbg)]
 pub struct PackedSeqBase<'s, const B: usize>
 where
@@ -129,8 +128,7 @@ where
     len: usize,
 }
 
-/// A 2-bit packed owned sequence of DNA bases.
-#[doc(hidden)]
+/// A variable-bit-width packed owned sequence of DNA bases.
 #[derive(Clone, Debug, MemSize, MemDbg)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[cfg_attr(feature = "epserde", derive(epserde::Epserde))]

@@ -1,5 +1,8 @@
 # Changelog
 
+## 4.4.1
+- Improve docs
+
 ## 4.4.0
 - Add `PackedSeq{Vec}Base::from_raw_parts` to construct directly from a `Vec` or slice.
 - Add `PackedNSeqVec::from_ascii_and_quality` that masks out low-quality bases.

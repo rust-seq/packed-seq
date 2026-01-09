@@ -141,6 +141,15 @@ pub use packed_seq::{
 pub use padded_it::{Advance, ChunkIt, PaddedIt};
 pub use traits::{Delay, Seq, SeqVec};
 
+/// Non-public implementation details.
+///
+/// Specifically, [`PackedSeq`] and [`BitSeq`] are both implemented via [`private::PackedSeqBase`], and
+/// [`PackedSeqVec`] and [`BitSeqVec`] via [`private::PackedSeqVecBase`], but this should not be relied upon.
+pub mod private {
+    pub use crate::packed_seq::PackedSeqBase;
+    pub use crate::packed_seq::PackedSeqVecBase;
+}
+
 // For internal use only.
 use core::array::from_fn;
 use mem_dbg::{MemDbg, MemSize};
