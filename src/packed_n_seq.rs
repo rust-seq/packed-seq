@@ -44,6 +44,7 @@ impl PackedNSeqVec {
         self.ambiguous.clear();
     }
 
+    #[cfg(feature = "rand")]
     pub fn random(len: usize, n_frac: f32) -> Self {
         let seq = PackedSeqVec::random(len);
         let ambiguous = BitSeqVec::random(len, n_frac);

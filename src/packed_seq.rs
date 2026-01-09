@@ -1403,6 +1403,7 @@ impl PackedSeqVecBase<1> {
         }
     }
 
+    #[cfg(feature = "rand")]
     pub fn random(len: usize, n_frac: f32) -> Self {
         let byte_len = len.div_ceil(Self::C8);
         let mut seq = vec![0; byte_len + PADDING];
