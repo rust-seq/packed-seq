@@ -3,6 +3,8 @@
 <!-- next-header -->
 
 ## git
+
+## 4.4.2
 - Bugfix on 32-bit platforms where reverse-complementing k-mers used `usize::BITS` instead of `u64::BITS`.
 
 ## 4.4.1
