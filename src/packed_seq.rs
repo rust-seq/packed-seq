@@ -328,7 +328,7 @@ const fn revcomp_raw(word: u64) -> u64 {
 /// Compute the reverse complement of a short sequence packed in a `u64`.
 #[inline(always)]
 pub const fn revcomp_u64(word: u64, len: usize) -> u64 {
-    revcomp_raw(word) >> (usize::BITS as usize - 2 * len)
+    revcomp_raw(word) >> (u64::BITS as usize - 2 * len)
 }
 
 #[inline(always)]
@@ -356,7 +356,7 @@ pub fn char_is_ambiguous(base: u8) -> u8 {
 /// Reverse `len` bits packed in a `u64`.
 #[inline(always)]
 pub const fn rev_u64(word: u64, len: usize) -> u64 {
-    word.reverse_bits() >> (usize::BITS as usize - len)
+    word.reverse_bits() >> (u64::BITS as usize - len)
 }
 
 /// Reverse `len` bits packed in a `u128`.
