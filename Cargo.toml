@@ -1,6 +1,6 @@
 [package]
 name = "packed-seq"
-version = "4.4.2"
+version = "5.0.0"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/rust-seq/packed-seq"
