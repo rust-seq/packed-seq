@@ -1,4 +1,4 @@
-use wide::{CmpLt, i8x32};
+use wide::i8x32;
 
 use crate::packed_seq::read_slice_32;
 
@@ -92,7 +92,7 @@ impl PackedNSeqVec {
                     std::mem::transmute::<_, i8x32>(read_slice_32(quality, i))
                 });
 
-                let mask = t_simd.cmp_lt(chunk).move_mask() as u32;
+                let mask = t_simd.simd_lt(chunk).to_bitmask() as u32;
                 let ambi = &mut ambiguous[i / 32];
                 *ambi = (u32::from_ne_bytes(*ambi) | mask).to_ne_bytes();
             }
@@ -130,7 +130,7 @@ impl PackedNSeqVec {
             let chunk =
                 i8x32::from(unsafe { std::mem::transmute::<_, i8x32>(read_slice_32(quality, i)) });
 
-            let mask = t_simd.cmp_lt(chunk).move_mask() as u32;
+            let mask = t_simd.simd_lt(chunk).to_bitmask() as u32;
             let ambi = &mut ambiguous[i / 32];
             *ambi = (u32::from_ne_bytes(*ambi) | mask).to_ne_bytes();
         }

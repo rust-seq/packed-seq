@@ -1,8 +1,12 @@
 # Changelog
 
-<!-- next-header -->
-
 ## git
+
+## 4.5.0
+- Bump `wide` to 1.5.0, main syntax changes:
+  - `.as_array_ref()` -> `.as_array()`
+  - `.cmp_gt` / `.cmp_lt` -> `.simd_gt` / `.simd_lt`
+  - `.move_mask()` -> `.to_bitmask()`
 
 ## 4.4.2
 - Bugfix on 32-bit platforms where reverse-complementing k-mers used `usize::BITS` instead of `u64::BITS`.

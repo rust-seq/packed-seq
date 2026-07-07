@@ -17,7 +17,7 @@ Please cite the
 [`simd-minimizers`](https://github.com/rust-seq/simd-minimizers) paper, for which this
 crate was developed:
 
-- SimdMinimizers: Computing Random Minimizers, fast.  
+- SimdMinimizers: Computing Random Minimizers, fast.
   Ragnar Groot Koerkamp, Igor Martayan.
   SEA 2025 [https://doi.org/10.4230/LIPIcs.SEA.2025.20](doi.org/10.4230/LIPIcs.SEA.2025.20)
 
@@ -62,7 +62,7 @@ assert_eq!(packed_bases, bases);
 let seq = b"AAAACCTTGGTTACTG"; // plain ASCII sequence
 // chunks:  ^ ^ ^ ^ ^ ^ ^ ^
 let (par_iter, padding) = seq.as_slice().par_iter_bp(1);
-let mut par_iter_u8 = par_iter.map(|x| x.as_array_ref().map(|c| c as u8));
+let mut par_iter_u8 = par_iter.map(|x| x.as_array().map(|c| c as u8));
 assert_eq!(par_iter_u8.next(), Some(*b"AACTGTAT"));
 assert_eq!(par_iter_u8.next(), Some(*b"AACTGTCG"));
 assert_eq!(par_iter_u8.next(), None);

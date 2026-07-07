@@ -85,7 +85,7 @@
 //! // the `1` argument indicates a 'context' length of 1,
 //! // since we're just iterating single characters.
 //! let par_iter = seq.as_slice().par_iter_bp(1);
-//! let mut par_iter_u8 = par_iter.it.map(|x| x.as_array_ref().map(|c| c as u8));
+//! let mut par_iter_u8 = par_iter.it.map(|x| x.as_array().map(|c| c as u8));
 //! assert_eq!(par_iter_u8.next(), Some(*b"AACTGTAT"));
 //! assert_eq!(par_iter_u8.next(), Some(*b"AACTGTCG"));
 //! assert_eq!(par_iter_u8.next(), None);

@@ -1277,7 +1277,7 @@ where
                             t(lossy_encoded),
                         ))
                     };
-                    let packed_bytes = !(chars.cmp_eq(lookup).move_mask() as u32);
+                    let packed_bytes = !(chars.cmp_eq(lookup).to_bitmask() as u32);
 
                     last_i = i;
                     unsafe {
@@ -1470,7 +1470,7 @@ impl<'s> PackedSeqBase<'s, 1> {
             #[inline(always)]
             move |(a, r)| {
                 cnt += a;
-                let out = cnt.cmp_gt(S::ZERO);
+                let out = cnt.simd_gt(S::ZERO);
                 cnt -= r;
                 out
             },
@@ -1506,7 +1506,7 @@ impl<'s> PackedSeqBase<'s, 1> {
             #[inline(always)]
             move |(a, r)| {
                 cnt += a;
-                let out = cnt.cmp_gt(S::ZERO);
+                let out = cnt.simd_gt(S::ZERO);
                 cnt -= r;
                 out
             },

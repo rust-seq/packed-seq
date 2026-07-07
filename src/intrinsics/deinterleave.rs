@@ -41,8 +41,8 @@ unsafe fn deinterleave_neon(a: u32x8, b: u32x8) -> (u32x8, u32x8) {
 
 #[inline(always)]
 unsafe fn deinterleave_fallback(a: u32x8, b: u32x8) -> (u32x8, u32x8) {
-    let a = a.as_array_ref();
-    let b = b.as_array_ref();
+    let a = a.as_array();
+    let b = b.as_array();
     (
         u32x8::new([
             *a.get_unchecked(0),

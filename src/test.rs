@@ -469,8 +469,8 @@ fn par_iter_bp_fuzz() {
         for i in 0..7 {
             for j in 0..context - 1 {
                 assert_eq!(
-                    it[it_len - (context - 1) + j].as_array_ref()[i],
-                    it[j].as_array_ref()[i + 1],
+                    it[it_len - (context - 1) + j].as_array()[i],
+                    it[j].as_array()[i + 1],
                     "Context check failed at {i} {j}"
                 );
             }
@@ -532,8 +532,8 @@ fn par_iter_bp_delayed_fuzz() {
         for i in 0..7 {
             for j in 0..context - 1 {
                 assert_eq!(
-                    it[it_len - (context - 1) + j].0.as_array_ref()[i],
-                    it[j].0.as_array_ref()[i + 1],
+                    it[it_len - (context - 1) + j].0.as_array()[i],
+                    it[j].0.as_array()[i + 1],
                     "Context check failed at {i} {j}"
                 );
             }
@@ -612,8 +612,8 @@ fn par_iter_bp_delayed2_fuzz() {
         for i in 0..7 {
             for j in 0..context - 1 {
                 assert_eq!(
-                    it[it_len - (context - 1) + j].0.as_array_ref()[i],
-                    it[j].0.as_array_ref()[i + 1],
+                    it[it_len - (context - 1) + j].0.as_array()[i],
+                    it[j].0.as_array()[i + 1],
                     "Context check failed at {i} {j}"
                 );
             }
