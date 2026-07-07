@@ -7,6 +7,7 @@
   - `.as_array_ref()` -> `.as_array()`
   - `.cmp_gt` / `.cmp_lt` -> `.simd_gt` / `.simd_lt`
   - `.move_mask()` -> `.to_bitmask()`
+- Bump to the latest versions of `sux`, `epserde`, `rand`
 
 ## 4.4.2
 - Bugfix on 32-bit platforms where reverse-complementing k-mers used `usize::BITS` instead of `u64::BITS`.
