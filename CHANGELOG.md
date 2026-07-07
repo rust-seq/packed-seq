@@ -3,6 +3,8 @@
 <!-- next-header -->
 
 ## git
+
+## 5.0.0
 - Bump `wide` to 1.5.0, potential breaking syntax changes:
   - `.as_array_ref()` -> `.as_array()`
   - `.as_array_mut()` -> `.as_mut_array()`
