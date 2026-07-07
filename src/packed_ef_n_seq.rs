@@ -62,7 +62,7 @@ impl PackedEfNSeqVec {
 
 #[test]
 fn ef_duplicate_values() {
-    let vals = vec![1, 2, 3, 4, 8, 10, 10, 123];
+    let vals: Vec<u64> = vec![1, 2, 3, 4, 8, 10, 10, 123];
     let mut builder = EliasFanoBuilder::new(vals.len(), *vals.last().unwrap());
     for x in vals {
         builder.push(x);

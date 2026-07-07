@@ -22,7 +22,7 @@ epserde = { version = "0.8", optional = true }
 # Optional pyclass atrributes for some objects.
 pyo3 = { version = "0.25", features = ["extension-module"], optional = true }
 # Optional, for PackedEfNSeqVec
-sux = { version = "0.10.2", optional = true }
+sux = { version = "0.14", optional = true }
 # Optional, for reading PackedSeq[N]Vec directly from a file
 needletail = { version = "0.6.3", optional = true }
 
