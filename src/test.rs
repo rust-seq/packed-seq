@@ -1,6 +1,6 @@
 use std::hint::black_box;
 
-use rand::{Rng, random_range};
+use rand::{RngExt, random_range};
 use wide::u32x8;
 
 use crate::packed_seq::PADDING;

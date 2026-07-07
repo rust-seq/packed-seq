@@ -331,10 +331,10 @@ impl SeqVec for Vec<u8> {
 
     #[cfg(feature = "rand")]
     fn random(n: usize) -> Self {
-        use rand::{RngCore, SeedableRng};
+        use rand::Rng;
 
         let mut seq = vec![0; n];
-        rand::rngs::SmallRng::from_os_rng().fill_bytes(&mut seq);
+        rand::make_rng::<rand::rngs::SmallRng>().fill_bytes(&mut seq);
         seq
     }
 }

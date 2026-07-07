@@ -16,7 +16,7 @@ cfg-if = "1.0"
 ensure_simd = "0.1.0"
 
 # Optional generate random sequences for testing. (Default enabled.)
-rand = { version = "0.9", features = ["small_rng"], optional = true }
+rand = { version = "0.10", optional = true }
 # Optional (de)serialization using epserde.
 epserde = { version = "0.8", optional = true }
 # Optional pyclass atrributes for some objects.

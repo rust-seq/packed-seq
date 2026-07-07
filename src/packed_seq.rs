@@ -1364,11 +1364,11 @@ where
 
     #[cfg(feature = "rand")]
     fn random(n: usize) -> Self {
-        use rand::{RngCore, SeedableRng};
+        use rand::Rng;
 
         let byte_len = n.div_ceil(Self::C8);
         let mut seq = vec![0; byte_len + PADDING];
-        rand::rngs::SmallRng::from_os_rng().fill_bytes(&mut seq[..byte_len]);
+        rand::make_rng::<rand::rngs::SmallRng>().fill_bytes(&mut seq[..byte_len]);
         // Ensure that the last byte is padded with zeros.
         if n % Self::C8 != 0 {
             seq[byte_len - 1] &= (1 << (B * (n % Self::C8))) - 1;
