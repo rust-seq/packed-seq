@@ -125,6 +125,7 @@ pub mod packed_ef_n_seq;
 #[cfg(test)]
 mod test;
 
+pub use wide;
 /// A SIMD vector containing 8 u32s.
 pub use wide::u32x8;
 /// The number of lanes in a `u32x8`.
