@@ -18,7 +18,7 @@ ensure_simd = "0.1.0"
 # Optional generate random sequences for testing. (Default enabled.)
 rand = { version = "0.10", optional = true }
 # Optional (de)serialization using epserde.
-epserde = { version = "0.8", optional = true }
+epserde = { version = "0.12", optional = true }
 # Optional pyclass atrributes for some objects.
 pyo3 = { version = "0.25", features = ["extension-module"], optional = true }
 # Optional, for PackedEfNSeqVec
@@ -35,6 +35,9 @@ file_io = ["needletail"]
 
 # Enables PackedEfNSeq
 ef_seq = ["sux"]
+
+# Enables (de)serialization using epserde. Also activates sux's epserde support when ef_seq is enabled.
+epserde = ["dep:epserde", "sux?/epserde"]
 
 # Hides the `simd` warnings when neither AVX2 nor NEON is detected.
 scalar = ["ensure_simd/scalar"]

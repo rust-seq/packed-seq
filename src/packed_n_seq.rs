@@ -6,7 +6,6 @@ use super::*;
 
 #[derive(Clone, Copy, Debug, MemSize, MemDbg)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
-#[cfg_attr(feature = "epserde", derive(epserde::Epserde))]
 pub struct PackedNSeq<'s> {
     pub seq: PackedSeq<'s>,
     pub ambiguous: BitSeq<'s>,

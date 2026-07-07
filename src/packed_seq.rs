@@ -132,10 +132,7 @@ where
 #[derive(Clone, Debug, MemSize, MemDbg)]
 #[cfg_attr(feature = "pyo3", pyo3::pyclass)]
 #[cfg_attr(feature = "epserde", derive(epserde::Epserde))]
-pub struct PackedSeqVecBase<const B: usize>
-where
-    Bits<B>: SupportedBits,
-{
+pub struct PackedSeqVecBase<const B: usize> {
     /// NOTE: We maintain the invariant that this has at least 48 bytes of padding
     /// at the end after `len` finishes.
     /// This ensures that `read_unaligned` in `as_64` works OK.

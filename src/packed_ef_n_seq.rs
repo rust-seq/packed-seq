@@ -67,5 +67,5 @@ fn ef_duplicate_values() {
     for x in vals {
         builder.push(x);
     }
-    builder.build();
+    let _ef = builder.build();
 }
