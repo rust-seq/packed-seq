@@ -1259,7 +1259,6 @@ where
                 for i in (unaligned..last).step_by(32) {
                     use std::mem::transmute as t;
 
-                    use wide::CmpEq;
                     // Wide doesn't have u8x32, so this is messy here...
                     type S = wide::i8x32;
                     let chars: S = unsafe { t(read_slice_32(seq, i)) };
@@ -1274,7 +1273,7 @@ where
                             t(lossy_encoded),
                         ))
                     };
-                    let packed_bytes = !(chars.cmp_eq(lookup).to_bitmask() as u32);
+                    let packed_bytes = !(chars.simd_eq(lookup).to_bitmask() as u32);
 
                     last_i = i;
                     unsafe {
