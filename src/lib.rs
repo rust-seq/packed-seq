@@ -128,6 +128,8 @@ mod test;
 pub use wide;
 /// A SIMD vector containing 8 u32s.
 pub use wide::u32x8;
+/// A SIMD vector containing 8 u32s.
+pub type S = wide::u32x8;
 /// The number of lanes in a `u32x8`.
 pub const L: usize = 8;
 
@@ -155,4 +157,3 @@ pub mod private {
 use core::array::from_fn;
 use mem_dbg::{MemDbg, MemSize};
 use std::{hint::assert_unchecked, ops::Range};
-use wide::u32x8 as S;

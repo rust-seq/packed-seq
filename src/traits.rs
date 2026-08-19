@@ -1,6 +1,6 @@
 use crate::{ChunkIt, PaddedIt};
 
-use super::u32x8;
+use super::S;
 use mem_dbg::{MemDbg, MemSize};
 use std::ops::Range;
 
@@ -116,7 +116,7 @@ pub trait Seq<'s>: Copy + Eq + Ord {
     /// When `context>1`, consecutive chunks overlap by `context-1` bases.
     ///
     /// Expected to be implemented using SIMD instructions.
-    fn par_iter_bp(self, context: usize) -> PaddedIt<impl ChunkIt<u32x8>>;
+    fn par_iter_bp(self, context: usize) -> PaddedIt<impl ChunkIt<S>>;
 
     /// Iterate over 8 chunks of the sequence in parallel, returning two characters offset by `delay` positions.
     ///
@@ -133,7 +133,7 @@ pub trait Seq<'s>: Copy + Eq + Ord {
         self,
         context: usize,
         delay: Delay,
-    ) -> PaddedIt<impl ChunkIt<(u32x8, u32x8)>>;
+    ) -> PaddedIt<impl ChunkIt<(S, S)>>;
 
     /// Iterate over 8 chunks of the sequence in parallel, returning three characters:
     /// the char added, the one `delay` positions before, and the one `delay2` positions before.
@@ -154,7 +154,7 @@ pub trait Seq<'s>: Copy + Eq + Ord {
         context: usize,
         delay1: Delay,
         delay2: Delay,
-    ) -> PaddedIt<impl ChunkIt<(u32x8, u32x8, u32x8)>>;
+    ) -> PaddedIt<impl ChunkIt<(S, S, S)>>;
 
     /// Compare and return the LCP of the two sequences.
     fn cmp_lcp(&self, other: &Self) -> (std::cmp::Ordering, usize);
