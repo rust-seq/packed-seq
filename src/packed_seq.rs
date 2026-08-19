@@ -1259,15 +1259,15 @@ where
                 for i in (unaligned..last).step_by(32) {
                     use std::mem::transmute as t;
 
-                    // Wide doesn't have u8x32, so this is messy here...
-                    type S = wide::i8x32;
-                    let chars: S = unsafe { t(read_slice_32(seq, i)) };
+                    // Simd vec of u8
+                    type Su8 = wide::u8x32;
+                    let chars: Su8 = unsafe { t(read_slice_32(seq, i)) };
                     let upper_mask = !(b'a' - b'A');
                     // make everything upper case
-                    let chars = chars & S::splat(upper_mask as i8);
-                    let lossy_encoded = chars & S::splat(6);
-                    let table = unsafe { S::from(t::<_, S>(*b"AxCxTxGxxxxxxxxxAxCxTxGxxxxxxxxx")) };
-                    let lookup: S = unsafe {
+                    let chars = chars & Su8::splat(upper_mask);
+                    let lossy_encoded = chars & Su8::splat(6);
+                    let table: Su8 = unsafe { t(*b"AxCxTxGxxxxxxxxxAxCxTxGxxxxxxxxx") };
+                    let lookup: Su8 = unsafe {
                         t(std::arch::x86_64::_mm256_shuffle_epi8(
                             t(table),
                             t(lossy_encoded),
