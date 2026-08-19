@@ -1,6 +1,6 @@
 use crate::intrinsics::transpose;
 use std::mem::transmute;
-use crate::S;
+use crate::{L, S};
 
 /// Trait alias for iterators over multiple chunks in parallel, typically over `u32x8`.
 pub trait ChunkIt<T>: ExactSizeIterator<Item = T> {}
@@ -95,25 +95,25 @@ impl<I: ChunkIt<S>> PaddedIt<I> {
 
     /// Collect all values of a padded `u32x8`-iterator into a flat vector.
     ///
-    /// Implemented by taking 8 elements from each stream, and transposing this SIMD-matrix before writing out the results.
+    /// Implemented by taking `L` elements from each stream, and transposing this SIMD-matrix before writing out the results.
     /// The `tail` is appended at the end.
     #[inline(always)]
     pub fn collect_into(self, out_vec: &mut Vec<u32>) {
         let PaddedIt { it, padding } = self;
         let len = it.len();
-        out_vec.resize(len * 8, 0);
+        out_vec.resize(len * L, 0);
 
-        let mut m = [S::new([0; 8]); 8];
+        let mut m = [S::new([0; L]); L];
         let mut i = 0;
         it.for_each(|x| {
-            m[i % 8] = x;
-            if i % 8 == 7 {
+            m[i % L] = x;
+            if i % L == L - 1 {
                 let t = transpose(m);
-                for j in 0..8 {
+                for j in 0..L {
                     unsafe {
                         *out_vec
-                            .get_unchecked_mut(j * len + 8 * (i / 8)..)
-                            .split_first_chunk_mut::<8>()
+                            .get_unchecked_mut(j * len + L * (i / L)..)
+                            .split_first_chunk_mut::<L>()
                             .unwrap()
                             .0 = transmute(t[j]);
                     }
@@ -122,13 +122,13 @@ impl<I: ChunkIt<S>> PaddedIt<I> {
             i += 1;
         });
 
-        // Manually write the unfinished parts of length k=i%8.
+        // Manually write the unfinished parts of length k=i%L.
         let t = transpose(m);
-        let k = i % 8;
-        for j in 0..8 {
+        let k = i % L;
+        for j in 0..L {
             unsafe {
-                out_vec[j * len + 8 * (i / 8)..j * len + 8 * (i / 8) + k]
-                    .copy_from_slice(&transmute::<_, [u32; 8]>(t[j])[..k]);
+                out_vec[j * len + L * (i / L)..j * len + L * (i / L) + k]
+                    .copy_from_slice(&transmute::<_, [u32; L]>(t[j])[..k]);
             }
         }
 

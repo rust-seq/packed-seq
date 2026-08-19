@@ -1,13 +1,13 @@
 #![allow(unused)]
 
 use wide::u32x4;
-use crate::S;
+use crate::{L, S};
 
 /// Transpose an 8x8 matrix of 8 `u32x8` SIMD elements.
 /// <https://stackoverflow.com/questions/25622745/transpose-an-8x8-float-using-avx-avx2>
 // TODO: Investigate other transpose functions mentioned there?
 #[inline(always)]
-pub fn transpose(m: [S; 8]) -> [S; 8] {
+pub fn transpose(m: [S; L]) -> [S; L] {
     _transpose(m)
 }
 
@@ -23,7 +23,7 @@ const fn _mm_shuffle(z: u32, y: u32, x: u32, w: u32) -> i32 {
 // NOTE: AVX is sufficient here. AVX2 is not needed.
 #[inline(always)]
 #[cfg(target_feature = "avx")]
-fn _transpose(m: [S; 8]) -> [S; 8] {
+fn _transpose(m: [S; L]) -> [S; L] {
     unsafe {
         #[cfg(target_arch = "x86")]
         use core::arch::x86::*;
@@ -31,7 +31,7 @@ fn _transpose(m: [S; 8]) -> [S; 8] {
         use core::arch::x86_64::*;
         use core::mem::transmute;
 
-        let m: [__m256; 8] = transmute(m);
+        let m: [__m256; L] = transmute(m);
         let x0 = _mm256_unpacklo_ps(m[0], m[1]);
         let x1 = _mm256_unpackhi_ps(m[0], m[1]);
         let x2 = _mm256_unpacklo_ps(m[2], m[3]);
@@ -48,7 +48,7 @@ fn _transpose(m: [S; 8]) -> [S; 8] {
         let y5 = _mm256_shuffle_ps(x4, x6, _mm_shuffle(3, 2, 3, 2));
         let y6 = _mm256_shuffle_ps(x5, x7, _mm_shuffle(1, 0, 1, 0));
         let y7 = _mm256_shuffle_ps(x5, x7, _mm_shuffle(3, 2, 3, 2));
-        let mut t: [__m256; 8] = [transmute([0; 8]); 8];
+        let mut t: [__m256; L] = [transmute([0; L]); L];
         t[0] = _mm256_permute2f128_ps(y0, y4, 0x20);
         t[1] = _mm256_permute2f128_ps(y1, y5, 0x20);
         t[2] = _mm256_permute2f128_ps(y2, y6, 0x20);
@@ -63,7 +63,7 @@ fn _transpose(m: [S; 8]) -> [S; 8] {
 
 #[inline(always)]
 #[cfg(target_feature = "neon")]
-fn _transpose(m: [S; 8]) -> [S; 8] {
+fn _transpose(m: [S; L]) -> [S; L] {
     unsafe {
         use core::mem::transmute;
 
@@ -129,7 +129,7 @@ fn transpose_4x4_neon(m0: u32x4, m1: u32x4, m2: u32x4, m3: u32x4) -> [u32x4; 4] 
 
 #[inline(always)]
 #[cfg(not(any(target_feature = "avx", target_feature = "neon")))]
-fn _transpose(m: [S; 8]) -> [S; 8] {
+fn _transpose(m: [S; L]) -> [S; L] {
     unsafe {
         let m = m.map(|v| v.to_array());
         [0, 1, 2, 3, 4, 5, 6, 7].map(|i| S::new(m.map(|v| *v.get_unchecked(i))))

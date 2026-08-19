@@ -88,12 +88,12 @@ impl Seq<'_> for &[u8] {
         let n = num_kmers.div_ceil(L);
         let padding = L * n - num_kmers;
 
-        let offsets: [usize; 8] = from_fn(|l| l * n);
+        let offsets: [usize; L] = from_fn(|l| l * n);
         let mut cur = S::ZERO;
 
         // Boxed, so it doesn't consume precious registers.
         // Without this, cur is not always inlined into a register.
-        let mut buf = Box::new([S::ZERO; 8]);
+        let mut buf = Box::new([S::ZERO; L]);
 
         let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
         let it = (0..par_len).map(
@@ -102,7 +102,7 @@ impl Seq<'_> for &[u8] {
                 if i % 4 == 0 {
                     if i % 32 == 0 {
                         // Read a u256 for each lane containing the next 32 characters.
-                        let data: [S; 8] = from_fn(
+                        let data: [S; L] = from_fn(
                             #[inline(always)]
                             |lane| read_slice_32(self, offsets[lane] + i),
                         );
@@ -137,7 +137,7 @@ impl Seq<'_> for &[u8] {
         let n = num_kmers.div_ceil(L);
         let padding = L * n - num_kmers;
 
-        let offsets: [usize; 8] = from_fn(|l| l * n);
+        let offsets: [usize; L] = from_fn(|l| l * n);
         let mut upcoming = S::ZERO;
         let mut upcoming_d = S::ZERO;
 
@@ -159,13 +159,13 @@ impl Seq<'_> for &[u8] {
                 if i % 4 == 0 {
                     if i % 32 == 0 {
                         // Read a u256 for each lane containing the next 32 characters.
-                        let data: [S; 8] = from_fn(
+                        let data: [S; L] = from_fn(
                             #[inline(always)]
                             |lane| read_slice_32(self, offsets[lane] + i),
                         );
                         unsafe {
-                            let mut_array: &mut [S; 8] = buf
-                                .get_unchecked_mut(write_idx..write_idx + 8)
+                            let mut_array: &mut [S; L] = buf
+                                .get_unchecked_mut(write_idx..write_idx + L)
                                 .try_into()
                                 .unwrap_unchecked();
                             *mut_array = transpose(data);
@@ -207,7 +207,7 @@ impl Seq<'_> for &[u8] {
         let n = num_kmers.div_ceil(L);
         let padding = L * n - num_kmers;
 
-        let offsets: [usize; 8] = from_fn(|l| l * n);
+        let offsets: [usize; L] = from_fn(|l| l * n);
 
         let mut upcoming = S::ZERO;
         let mut upcoming_d1 = S::ZERO;
@@ -232,13 +232,13 @@ impl Seq<'_> for &[u8] {
                 if i % 4 == 0 {
                     if i % 32 == 0 {
                         // Read a u256 for each lane containing the next 32 characters.
-                        let data: [S; 8] = from_fn(
+                        let data: [S; L] = from_fn(
                             #[inline(always)]
                             |lane| read_slice_32(self, offsets[lane] + i),
                         );
                         unsafe {
-                            let mut_array: &mut [S; 8] = buf
-                                .get_unchecked_mut(write_idx..write_idx + 8)
+                            let mut_array: &mut [S; L] = buf
+                                .get_unchecked_mut(write_idx..write_idx + L)
                                 .try_into()
                                 .unwrap_unchecked();
                             *mut_array = transpose(data);

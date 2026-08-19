@@ -7,7 +7,7 @@ use crate::{intrinsics::transpose, padded_it::ChunkIt};
 
 use super::*;
 
-type SimdBuf = [S; 8];
+type SimdBuf = [S; L];
 
 struct RecycledBox(Option<Box<SimdBuf>>);
 
@@ -155,8 +155,8 @@ where
 {
     /// lowest B bits are 1.
     const CHAR_MASK: u64 = (1 << B) - 1;
-    const SIMD_B: S = S::new([B as u32; 8]);
-    const SIMD_CHAR_MASK: S = S::new([(1 << B) - 1; 8]);
+    const SIMD_B: S = S::new([B as u32; L]);
+    const SIMD_CHAR_MASK: S = S::new([(1 << B) - 1; L]);
     /// Chars per byte
     const C8: usize = 8 / B;
     /// Chars per u32
@@ -299,7 +299,7 @@ pub const fn complement_base(base: u8) -> u8 {
 /// Complement 8 lanes of 2-bit bases: `0<>2` and `1<>3`.
 #[inline(always)]
 pub fn complement_base_simd(base: S) -> S {
-    const TWO: S = S::new([2; 8]);
+    const TWO: S = S::new([2; L]);
     base ^ TWO
 }
 
@@ -681,7 +681,7 @@ where
     Bits<B>: SupportedBits,
 {
     #[inline(always)]
-    pub fn par_iter_bp_with_buf<BUF: DerefMut<Target = [S; 8]>>(
+    pub fn par_iter_bp_with_buf<BUF: DerefMut<Target = [S; L]>>(
         self,
         context: usize,
         mut buf: BUF,
@@ -704,7 +704,7 @@ where
         let bytes_per_chunk = n / Self::C8;
         let padding = Self::C8 * L * bytes_per_chunk - num_kmers_stride;
 
-        let offsets: [usize; 8] = from_fn(|l| l * bytes_per_chunk);
+        let offsets: [usize; L] = from_fn(|l| l * bytes_per_chunk);
         let mut cur = S::ZERO;
 
         let par_len = if num_kmers == 0 {
@@ -724,7 +724,7 @@ where
                     if i % Self::C32 == 0 {
                         if i % Self::C256 == 0 {
                             // Read a u256 for each lane containing the next 128 characters.
-                            let data: [S; 8] = from_fn(
+                            let data: [S; L] = from_fn(
                                 #[inline(always)]
                                 |lane| unsafe {
                                     read_slice_32_unchecked(
@@ -803,7 +803,7 @@ where
         let bytes_per_chunk = n / Self::C8;
         let padding = Self::C8 * L * bytes_per_chunk - num_kmers_stride;
 
-        let offsets: [usize; 8] = from_fn(|l| l * bytes_per_chunk);
+        let offsets: [usize; L] = from_fn(|l| l * bytes_per_chunk);
         let mut upcoming = S::ZERO;
         let mut upcoming_d = S::ZERO;
 
@@ -844,7 +844,7 @@ where
                     if i % Self::C32 == 0 {
                         if i % Self::C256 == 0 {
                             // Read a u256 for each lane containing the next 128 characters.
-                            let data: [S; 8] = from_fn(
+                            let data: [S; L] = from_fn(
                                 #[inline(always)]
                                 |lane| unsafe {
                                     read_slice_32_unchecked(
@@ -854,8 +854,8 @@ where
                                 },
                             );
                             unsafe {
-                                *TryInto::<&mut [S; 8]>::try_into(
-                                    buf.get_unchecked_mut(write_idx..write_idx + 8),
+                                *TryInto::<&mut [S; L]>::try_into(
+                                    buf.get_unchecked_mut(write_idx..write_idx + L),
                                 )
                                 .unwrap_unchecked() = transpose(data);
                             }
@@ -955,7 +955,7 @@ where
         let bytes_per_chunk = n / Self::C8;
         let padding = Self::C8 * L * bytes_per_chunk - num_kmers_stride;
 
-        let offsets: [usize; 8] = from_fn(|l| l * bytes_per_chunk);
+        let offsets: [usize; L] = from_fn(|l| l * bytes_per_chunk);
         let mut upcoming = S::ZERO;
         let mut upcoming_d1 = S::ZERO;
         let mut upcoming_d2 = S::ZERO;
@@ -995,7 +995,7 @@ where
                     if i % Self::C32 == 0 {
                         if i % Self::C256 == 0 {
                             // Read a u256 for each lane containing the next 128 characters.
-                            let data: [S; 8] = from_fn(
+                            let data: [S; L] = from_fn(
                                 #[inline(always)]
                                 |lane| unsafe {
                                     read_slice_32_unchecked(
@@ -1005,8 +1005,8 @@ where
                                 },
                             );
                             unsafe {
-                                *TryInto::<&mut [S; 8]>::try_into(
-                                    buf.get_unchecked_mut(write_idx..write_idx + 8),
+                                *TryInto::<&mut [S; L]>::try_into(
+                                    buf.get_unchecked_mut(write_idx..write_idx + L),
                                 )
                                 .unwrap_unchecked() = transpose(data);
                             }
