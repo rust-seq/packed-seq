@@ -83,7 +83,7 @@ impl Seq<'_> for &[u8] {
 
     /// Iter the ASCII characters in parallel.
     #[inline(always)]
-    fn par_iter_bp(self, context: usize) -> PaddedIt<impl ChunkIt<u32x8>> {
+    fn par_iter_bp(self, context: usize) -> PaddedIt<impl ChunkIt<S>> {
         let num_kmers = self.len().saturating_sub(context - 1);
         let n = num_kmers.div_ceil(L);
         let padding = L * n - num_kmers;
@@ -102,7 +102,7 @@ impl Seq<'_> for &[u8] {
                 if i % 4 == 0 {
                     if i % 32 == 0 {
                         // Read a u256 for each lane containing the next 32 characters.
-                        let data: [u32x8; 8] = from_fn(
+                        let data: [S; 8] = from_fn(
                             #[inline(always)]
                             |lane| read_slice_32(self, offsets[lane] + i),
                         );
@@ -126,7 +126,7 @@ impl Seq<'_> for &[u8] {
         self,
         context: usize,
         Delay(delay): Delay,
-    ) -> PaddedIt<impl ChunkIt<(u32x8, u32x8)>> {
+    ) -> PaddedIt<impl ChunkIt<(S, S)>> {
         assert!(
             delay < usize::MAX / 2,
             "Delay={} should be >=0.",
@@ -159,12 +159,12 @@ impl Seq<'_> for &[u8] {
                 if i % 4 == 0 {
                     if i % 32 == 0 {
                         // Read a u256 for each lane containing the next 32 characters.
-                        let data: [u32x8; 8] = from_fn(
+                        let data: [S; 8] = from_fn(
                             #[inline(always)]
                             |lane| read_slice_32(self, offsets[lane] + i),
                         );
                         unsafe {
-                            let mut_array: &mut [u32x8; 8] = buf
+                            let mut_array: &mut [S; 8] = buf
                                 .get_unchecked_mut(write_idx..write_idx + 8)
                                 .try_into()
                                 .unwrap_unchecked();
@@ -200,7 +200,7 @@ impl Seq<'_> for &[u8] {
         context: usize,
         Delay(delay1): Delay,
         Delay(delay2): Delay,
-    ) -> PaddedIt<impl ChunkIt<(u32x8, u32x8, u32x8)>> {
+    ) -> PaddedIt<impl ChunkIt<(S, S, S)>> {
         assert!(delay1 <= delay2, "Delay1 must be at most delay2.");
 
         let num_kmers = self.len().saturating_sub(context - 1);
@@ -232,12 +232,12 @@ impl Seq<'_> for &[u8] {
                 if i % 4 == 0 {
                     if i % 32 == 0 {
                         // Read a u256 for each lane containing the next 32 characters.
-                        let data: [u32x8; 8] = from_fn(
+                        let data: [S; 8] = from_fn(
                             #[inline(always)]
                             |lane| read_slice_32(self, offsets[lane] + i),
                         );
                         unsafe {
-                            let mut_array: &mut [u32x8; 8] = buf
+                            let mut_array: &mut [S; 8] = buf
                                 .get_unchecked_mut(write_idx..write_idx + 8)
                                 .try_into()
                                 .unwrap_unchecked();

@@ -293,7 +293,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
                 if i % 4 == 0 {
                     if i % 32 == 0 {
                         // Read a u256 for each lane containing the next 32 characters.
-                        let data: [u32x8; 8] = from_fn(
+                        let data: [S; 8] = from_fn(
                             #[inline(always)]
                             |lane| read_slice_32(self.0, offsets[lane] + i),
                         );
@@ -353,12 +353,12 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
                 if i % 4 == 0 {
                     if i % 32 == 0 {
                         // Read a u256 for each lane containing the next 32 characters.
-                        let data: [u32x8; 8] = from_fn(
+                        let data: [S; 8] = from_fn(
                             #[inline(always)]
                             |lane| read_slice_32(self.0, offsets[lane] + i),
                         );
                         unsafe {
-                            let mut_array: &mut [u32x8; 8] = buf
+                            let mut_array: &mut [S; 8] = buf
                                 .get_unchecked_mut(write_idx..write_idx + 8)
                                 .try_into()
                                 .unwrap_unchecked();
@@ -429,12 +429,12 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
                 if i % 4 == 0 {
                     if i % 32 == 0 {
                         // Read a u256 for each lane containing the next 32 characters.
-                        let data: [u32x8; 8] = from_fn(
+                        let data: [S; 8] = from_fn(
                             #[inline(always)]
                             |lane| read_slice_32(self.0, offsets[lane] + i),
                         );
                         unsafe {
-                            let mut_array: &mut [u32x8; 8] = buf
+                            let mut_array: &mut [S; 8] = buf
                                 .get_unchecked_mut(write_idx..write_idx + 8)
                                 .try_into()
                                 .unwrap_unchecked();

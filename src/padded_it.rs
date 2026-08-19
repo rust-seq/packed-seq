@@ -1,6 +1,6 @@
 use crate::intrinsics::transpose;
 use std::mem::transmute;
-use wide::u32x8;
+use crate::S;
 
 /// Trait alias for iterators over multiple chunks in parallel, typically over `u32x8`.
 pub trait ChunkIt<T>: ExactSizeIterator<Item = T> {}
@@ -84,7 +84,7 @@ impl<I> PaddedIt<I> {
     }
 }
 
-impl<I: ChunkIt<u32x8>> PaddedIt<I> {
+impl<I: ChunkIt<S>> PaddedIt<I> {
     /// Collect all values of a padded `u32x8`-iterator into a flat vector.
     /// Prefer `collect_into` to avoid repeated allocations.
     pub fn collect(self) -> Vec<u32> {
@@ -103,7 +103,7 @@ impl<I: ChunkIt<u32x8>> PaddedIt<I> {
         let len = it.len();
         out_vec.resize(len * 8, 0);
 
-        let mut m = [u32x8::new([0; 8]); 8];
+        let mut m = [S::new([0; 8]); 8];
         let mut i = 0;
         it.for_each(|x| {
             m[i % 8] = x;

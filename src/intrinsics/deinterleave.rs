@@ -1,8 +1,8 @@
-use wide::u32x8;
+use crate::S;
 
 #[inline(always)]
 #[cfg(target_feature = "avx2")]
-unsafe fn deinterleave_avx(a: u32x8, b: u32x8) -> (u32x8, u32x8) {
+unsafe fn deinterleave_avx(a: S, b: S) -> (S, S) {
     #[cfg(target_arch = "x86")]
     use core::arch::x86::{__m256, __m256d, _mm256_permute4x64_pd, _mm256_shuffle_ps};
     #[cfg(target_arch = "x86_64")]
@@ -24,7 +24,7 @@ unsafe fn deinterleave_avx(a: u32x8, b: u32x8) -> (u32x8, u32x8) {
 
 #[inline(always)]
 #[cfg(target_feature = "neon")]
-unsafe fn deinterleave_neon(a: u32x8, b: u32x8) -> (u32x8, u32x8) {
+unsafe fn deinterleave_neon(a: S, b: S) -> (S, S) {
     use core::arch::aarch64::{uint32x4_t, vuzp1q_u32, vuzp2q_u32};
     use core::mem::transmute;
 
@@ -34,17 +34,17 @@ unsafe fn deinterleave_neon(a: u32x8, b: u32x8) -> (u32x8, u32x8) {
     let a_odd = vuzp2q_u32(a1, a2);
     let b_even = vuzp1q_u32(b1, b2);
     let b_odd = vuzp2q_u32(b1, b2);
-    let ab_even: u32x8 = transmute((a_even, b_even));
-    let ab_odd: u32x8 = transmute((a_odd, b_odd));
+    let ab_even: S = transmute((a_even, b_even));
+    let ab_odd: S = transmute((a_odd, b_odd));
     (ab_even, ab_odd)
 }
 
 #[inline(always)]
-unsafe fn deinterleave_fallback(a: u32x8, b: u32x8) -> (u32x8, u32x8) {
+unsafe fn deinterleave_fallback(a: S, b: S) -> (S, S) {
     let a = a.as_array();
     let b = b.as_array();
     (
-        u32x8::new([
+        S::new([
             *a.get_unchecked(0),
             *a.get_unchecked(2),
             *a.get_unchecked(4),
@@ -54,7 +54,7 @@ unsafe fn deinterleave_fallback(a: u32x8, b: u32x8) -> (u32x8, u32x8) {
             *b.get_unchecked(4),
             *b.get_unchecked(6),
         ]),
-        u32x8::new([
+        S::new([
             *a.get_unchecked(1),
             *a.get_unchecked(3),
             *a.get_unchecked(5),
@@ -70,7 +70,7 @@ unsafe fn deinterleave_fallback(a: u32x8, b: u32x8) -> (u32x8, u32x8) {
 /// Given two SIMD vectors `a` and `b`, return one vector with elements at even
 /// positions in `a` and `b` and one vector with elements at odd positions.
 #[inline(always)]
-pub fn deinterleave(a: u32x8, b: u32x8) -> (u32x8, u32x8) {
+pub fn deinterleave(a: S, b: S) -> (S, S) {
     #[cfg(target_feature = "avx2")]
     unsafe {
         deinterleave_avx(a, b)
@@ -91,8 +91,8 @@ mod tests {
 
     #[test]
     fn test_deinterleave() {
-        let a = u32x8::new([0, 1, 2, 3, 4, 5, 6, 7]);
-        let b = u32x8::new([8, 9, 10, 11, 12, 13, 14, 15]);
+        let a = S::new([0, 1, 2, 3, 4, 5, 6, 7]);
+        let b = S::new([8, 9, 10, 11, 12, 13, 14, 15]);
         let (c, d) = deinterleave(a, b);
 
         assert_eq!(c.to_array(), [0, 2, 4, 6, 8, 10, 12, 14]);

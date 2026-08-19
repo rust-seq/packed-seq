@@ -1,7 +1,7 @@
 use std::hint::black_box;
 
 use rand::{RngExt, random_range};
-use wide::u32x8;
+use wide::S;
 
 use crate::packed_seq::PADDING;
 
@@ -353,9 +353,9 @@ fn par_iter_bp() {
     let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
     let PaddedIt { it, padding } = s.as_slice().par_iter_bp(1);
     let it = it.collect::<Vec<_>>();
-    fn f(x: &[u8; 8]) -> u32x8 {
+    fn f(x: &[u8; 8]) -> S {
         let x = x.map(|x| pack_char(x) as u32);
-        u32x8::from(x)
+        S::from(x)
     }
     assert_eq!(padding, 8 * 8 - s.len());
     assert_eq!(
@@ -378,10 +378,10 @@ fn par_iter_bp_delayed0() {
     let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
     let PaddedIt { it, padding } = s.as_slice().par_iter_bp_delayed(1, Delay(0));
     let it = it.collect::<Vec<_>>();
-    fn f(x: &[u8; 8], y: &[u8; 8]) -> (u32x8, u32x8) {
+    fn f(x: &[u8; 8], y: &[u8; 8]) -> (S, S) {
         let x = x.map(|x| pack_char(x) as u32);
         let y = y.map(|x| pack_char(x) as u32);
-        (u32x8::from(x), u32x8::from(y))
+        (S::from(x), S::from(y))
     }
     assert_eq!(padding, 8 * 8 - s.len());
     assert_eq!(
@@ -404,10 +404,10 @@ fn par_iter_bp_delayed1() {
     let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
     let PaddedIt { it, padding } = s.as_slice().par_iter_bp_delayed(1, Delay(1));
     let it = it.collect::<Vec<_>>();
-    fn f(x: &[u8; 8], y: &[u8; 8]) -> (u32x8, u32x8) {
+    fn f(x: &[u8; 8], y: &[u8; 8]) -> (S, S) {
         let x = x.map(|x| pack_char(x) as u32);
         let y = y.map(|x| pack_char(x) as u32);
-        (u32x8::from(x), u32x8::from(y))
+        (S::from(x), S::from(y))
     }
     assert_eq!(padding, 8 * 8 - s.len());
     assert_eq!(
@@ -452,9 +452,9 @@ fn par_iter_bp_fuzz() {
         eprintln!("CONTEXT: {context:?}");
         let PaddedIt { it, padding } = s.par_iter_bp(context);
         let it = it.collect::<Vec<_>>();
-        fn f(x: &[u8; 8]) -> u32x8 {
+        fn f(x: &[u8; 8]) -> S {
             let x = x.map(|x| pack_char(x) as u32);
-            u32x8::from(x)
+            S::from(x)
         }
 
         let it_len = it.len();
@@ -514,10 +514,10 @@ fn par_iter_bp_delayed_fuzz() {
         let PaddedIt { it, padding } = s.par_iter_bp_delayed(context, delay);
         eprintln!("padding: {padding}");
         let it = it.collect::<Vec<_>>();
-        fn f(x: &[u8; 8], y: &[u8; 8]) -> (u32x8, u32x8) {
+        fn f(x: &[u8; 8], y: &[u8; 8]) -> (S, S) {
             let x = x.map(|x| pack_char(x) as u32);
             let y = y.map(|x| pack_char(x) as u32);
-            (u32x8::from(x), u32x8::from(y))
+            (S::from(x), S::from(y))
         }
 
         let it_len = it.len();
@@ -593,11 +593,11 @@ fn par_iter_bp_delayed2_fuzz() {
             s.par_iter_bp_delayed_2(context, Delay(delay), Delay(delay2));
         eprintln!("padding: {padding}");
         let it = it.collect::<Vec<_>>();
-        fn f(x: &[u8; 8], y: &[u8; 8], z: &[u8; 8]) -> (u32x8, u32x8, u32x8) {
+        fn f(x: &[u8; 8], y: &[u8; 8], z: &[u8; 8]) -> (S, S, S) {
             let x = x.map(|x| pack_char(x) as u32);
             let y = y.map(|x| pack_char(x) as u32);
             let z = z.map(|x| pack_char(x) as u32);
-            (u32x8::from(x), u32x8::from(y), u32x8::from(z))
+            (S::from(x), S::from(y), S::from(z))
         }
 
         let it_len = it.len();
@@ -659,11 +659,11 @@ fn par_iter_bp_delayed01() {
     let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
     let PaddedIt { it, padding } = s.as_slice().par_iter_bp_delayed_2(1, Delay(0), Delay(1));
     let it = it.collect::<Vec<_>>();
-    fn f(x: &[u8; 8], y: &[u8; 8], z: &[u8; 8]) -> (u32x8, u32x8, u32x8) {
+    fn f(x: &[u8; 8], y: &[u8; 8], z: &[u8; 8]) -> (S, S, S) {
         let x = x.map(|x| pack_char(x) as u32);
         let y = y.map(|x| pack_char(x) as u32);
         let z = z.map(|x| pack_char(x) as u32);
-        (u32x8::from(x), u32x8::from(y), u32x8::from(z))
+        (S::from(x), S::from(y), S::from(z))
     }
     assert_eq!(padding, 8 * 8 - s.len());
     assert_eq!(

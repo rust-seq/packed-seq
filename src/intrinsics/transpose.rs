@@ -1,7 +1,7 @@
 #![allow(unused)]
 
 use wide::u32x4;
-use wide::u32x8 as S;
+use crate::S;
 
 /// Transpose an 8x8 matrix of 8 `u32x8` SIMD elements.
 /// <https://stackoverflow.com/questions/25622745/transpose-an-8x8-float-using-avx-avx2>

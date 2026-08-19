@@ -298,8 +298,8 @@ pub const fn complement_base(base: u8) -> u8 {
 
 /// Complement 8 lanes of 2-bit bases: `0<>2` and `1<>3`.
 #[inline(always)]
-pub fn complement_base_simd(base: u32x8) -> u32x8 {
-    const TWO: u32x8 = u32x8::new([2; 8]);
+pub fn complement_base_simd(base: S) -> S {
+    const TWO: S = S::new([2; 8]);
     base ^ TWO
 }
 
@@ -398,21 +398,21 @@ where
 
 /// Read up to 32 bytes starting at idx.
 #[inline(always)]
-pub(crate) unsafe fn read_slice_32_unchecked(seq: &[u8], idx: usize) -> u32x8 {
+pub(crate) unsafe fn read_slice_32_unchecked(seq: &[u8], idx: usize) -> S {
     unsafe {
         let src = seq.as_ptr().add(idx);
         debug_assert!(idx + 32 <= seq.len());
-        std::mem::transmute::<_, *const u32x8>(src).read_unaligned()
+        std::mem::transmute::<_, *const S>(src).read_unaligned()
     }
 }
 
 /// Read up to 32 bytes starting at idx.
 #[inline(always)]
-pub(crate) fn read_slice_32(seq: &[u8], idx: usize) -> u32x8 {
+pub(crate) fn read_slice_32(seq: &[u8], idx: usize) -> S {
     unsafe {
         let src = seq.as_ptr().add(idx);
         if idx + 32 <= seq.len() {
-            std::mem::transmute::<_, *const u32x8>(src).read_unaligned()
+            std::mem::transmute::<_, *const S>(src).read_unaligned()
         } else {
             let num_bytes = seq.len().saturating_sub(idx);
             let mut result = [0u8; 32];
@@ -724,7 +724,7 @@ where
                     if i % Self::C32 == 0 {
                         if i % Self::C256 == 0 {
                             // Read a u256 for each lane containing the next 128 characters.
-                            let data: [u32x8; 8] = from_fn(
+                            let data: [S; 8] = from_fn(
                                 #[inline(always)]
                                 |lane| unsafe {
                                     read_slice_32_unchecked(
@@ -844,7 +844,7 @@ where
                     if i % Self::C32 == 0 {
                         if i % Self::C256 == 0 {
                             // Read a u256 for each lane containing the next 128 characters.
-                            let data: [u32x8; 8] = from_fn(
+                            let data: [S; 8] = from_fn(
                                 #[inline(always)]
                                 |lane| unsafe {
                                     read_slice_32_unchecked(
@@ -854,7 +854,7 @@ where
                                 },
                             );
                             unsafe {
-                                *TryInto::<&mut [u32x8; 8]>::try_into(
+                                *TryInto::<&mut [S; 8]>::try_into(
                                     buf.get_unchecked_mut(write_idx..write_idx + 8),
                                 )
                                 .unwrap_unchecked() = transpose(data);
@@ -995,7 +995,7 @@ where
                     if i % Self::C32 == 0 {
                         if i % Self::C256 == 0 {
                             // Read a u256 for each lane containing the next 128 characters.
-                            let data: [u32x8; 8] = from_fn(
+                            let data: [S; 8] = from_fn(
                                 #[inline(always)]
                                 |lane| unsafe {
                                     read_slice_32_unchecked(
@@ -1005,7 +1005,7 @@ where
                                 },
                             );
                             unsafe {
-                                *TryInto::<&mut [u32x8; 8]>::try_into(
+                                *TryInto::<&mut [S; 8]>::try_into(
                                     buf.get_unchecked_mut(write_idx..write_idx + 8),
                                 )
                                 .unwrap_unchecked() = transpose(data);
@@ -1460,7 +1460,7 @@ impl<'s> PackedSeqBase<'s, 1> {
 
         let it = self.par_iter_bp_delayed(context, Delay(delay));
 
-        let mut cnt = u32x8::ZERO;
+        let mut cnt = S::ZERO;
 
         it.map(
             #[inline(always)]
@@ -1496,7 +1496,7 @@ impl<'s> PackedSeqBase<'s, 1> {
 
         let it = self.par_iter_bp_delayed_with_buf(context, Delay(delay), buf);
 
-        let mut cnt = u32x8::ZERO;
+        let mut cnt = S::ZERO;
 
         it.map(
             #[inline(always)]
