@@ -128,9 +128,19 @@ mod test;
 pub use wide;
 /// A SIMD vector containing 8 u32s.
 pub use wide::u32x8;
+
 /// A SIMD vector containing 8 u32s.
+#[cfg(feature = "avx512")]
+pub type S = wide::u32x16;
+/// A SIMD vector containing 16 u32s.
+#[cfg(not(feature = "avx512"))]
 pub type S = wide::u32x8;
+
 /// The number of lanes in a `u32x8`.
+#[cfg(feature = "avx512")]
+pub const L: usize = 16;
+/// The number of lanes in a `u32x8`.
+#[cfg(not(feature = "avx512"))]
 pub const L: usize = 8;
 
 pub use ascii_seq::{AsciiSeq, AsciiSeqVec};

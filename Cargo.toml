@@ -27,6 +27,7 @@ sux = { version = "0.14", optional = true }
 needletail = { version = "0.7", optional = true }
 
 [features]
+avx512 = []
 # Also needed for tests.
 default = ["rand"]
 
