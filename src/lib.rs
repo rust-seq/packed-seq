@@ -59,6 +59,9 @@
 //! ## Example
 //!
 //! ```
+//! # #[cfg(not(feature="avx512"))]
+//! # mod wrapper_module {
+//! # fn example() {
 //! use packed_seq::{SeqVec, Seq, AsciiSeqVec, PackedSeqVec, pack_char};
 //! // Plain ASCII sequence.
 //! let seq = b"ACTGCAGCGCATATGTAGT";
@@ -99,6 +102,8 @@
 //! let bases: Vec<u32> = seq.as_slice().par_iter_bp(3).advance(2).collect();
 //! let bases: Vec<u8> = bases.into_iter().map(|x| x as u8).collect();
 //! assert_eq!(bases, &seq[2..]);
+//! # }
+//! # }
 //! ```
 //!
 //! ## Feature flags
