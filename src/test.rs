@@ -1,9 +1,8 @@
 use std::hint::black_box;
 
-use rand::{RngExt, random_range};
-use wide::S;
-
+use crate::S;
 use crate::packed_seq::PADDING;
+use rand::{RngExt, random_range};
 
 use super::*;
 
@@ -349,6 +348,7 @@ fn iter_bp() {
 }
 
 #[test]
+#[cfg(not(feature = "avx512"))]
 fn par_iter_bp() {
     let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
     let PaddedIt { it, padding } = s.as_slice().par_iter_bp(1);
@@ -374,6 +374,7 @@ fn par_iter_bp() {
 }
 
 #[test]
+#[cfg(not(feature = "avx512"))]
 fn par_iter_bp_delayed0() {
     let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
     let PaddedIt { it, padding } = s.as_slice().par_iter_bp_delayed(1, Delay(0));
@@ -400,6 +401,7 @@ fn par_iter_bp_delayed0() {
 }
 
 #[test]
+#[cfg(not(feature = "avx512"))]
 fn par_iter_bp_delayed1() {
     let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
     let PaddedIt { it, padding } = s.as_slice().par_iter_bp_delayed(1, Delay(1));
@@ -452,7 +454,7 @@ fn par_iter_bp_fuzz() {
         eprintln!("CONTEXT: {context:?}");
         let PaddedIt { it, padding } = s.par_iter_bp(context);
         let it = it.collect::<Vec<_>>();
-        fn f(x: &[u8; 8]) -> S {
+        fn f(x: &[u8; L]) -> S {
             let x = x.map(|x| pack_char(x) as u32);
             S::from(x)
         }
@@ -462,8 +464,8 @@ fn par_iter_bp_fuzz() {
         eprintln!("padding: {padding}");
 
         // Test padding len.
-        assert_eq!(8 * it_len, len + 7 * (context - 1) + padding);
-        assert!(padding < 32);
+        assert_eq!(L * it_len, len + (L - 1) * (context - 1) + padding);
+        assert!(padding < 4 * L);
 
         // Test context overlap.
         for i in 0..7 {
@@ -501,7 +503,7 @@ fn par_iter_bp_delayed_fuzz() {
         eprintln!("SEQ: {:?}", seq.seq);
         let s = PackedSeqVec::from_ascii(&seq.seq);
 
-        let offset = random_range(0..=8.min(len));
+        let offset = random_range(0..=L.min(len));
         // let offset = 0;
         eprintln!("OFFSET: {offset:?}");
         let seq = seq.slice(offset..len);
@@ -514,7 +516,7 @@ fn par_iter_bp_delayed_fuzz() {
         let PaddedIt { it, padding } = s.par_iter_bp_delayed(context, delay);
         eprintln!("padding: {padding}");
         let it = it.collect::<Vec<_>>();
-        fn f(x: &[u8; 8], y: &[u8; 8]) -> (S, S) {
+        fn f(x: &[u8; L], y: &[u8; L]) -> (S, S) {
             let x = x.map(|x| pack_char(x) as u32);
             let y = y.map(|x| pack_char(x) as u32);
             (S::from(x), S::from(y))
@@ -525,11 +527,11 @@ fn par_iter_bp_delayed_fuzz() {
         eprintln!("padding: {padding}");
 
         // Test padding len.
-        assert_eq!(8 * it_len, len + 7 * (context - 1) + padding);
-        assert!(padding < 32);
+        assert_eq!(L * it_len, len + (L - 1) * (context - 1) + padding);
+        assert!(padding < 4 * L);
 
         // Test context overlap.
-        for i in 0..7 {
+        for i in 0..L - 1 {
             for j in 0..context - 1 {
                 assert_eq!(
                     it[it_len - (context - 1) + j].0.as_array()[i],
@@ -579,7 +581,7 @@ fn par_iter_bp_delayed2_fuzz() {
         eprintln!("SEQ: {:?}", seq.seq);
         let s = PackedSeqVec::from_ascii(&seq.seq);
 
-        let offset = random_range(0..=8.min(len));
+        let offset = random_range(0..=L.min(len));
         eprintln!("OFFSET: {offset:?}");
         let seq = seq.slice(offset..len);
         let s = s.slice(offset..len);
@@ -593,7 +595,7 @@ fn par_iter_bp_delayed2_fuzz() {
             s.par_iter_bp_delayed_2(context, Delay(delay), Delay(delay2));
         eprintln!("padding: {padding}");
         let it = it.collect::<Vec<_>>();
-        fn f(x: &[u8; 8], y: &[u8; 8], z: &[u8; 8]) -> (S, S, S) {
+        fn f(x: &[u8; L], y: &[u8; L], z: &[u8; L]) -> (S, S, S) {
             let x = x.map(|x| pack_char(x) as u32);
             let y = y.map(|x| pack_char(x) as u32);
             let z = z.map(|x| pack_char(x) as u32);
@@ -605,11 +607,11 @@ fn par_iter_bp_delayed2_fuzz() {
         eprintln!("padding: {padding}");
 
         // Test padding len.
-        assert_eq!(8 * it_len, len + 7 * (context - 1) + padding);
-        assert!(padding < 32);
+        assert_eq!(L * it_len, len + (L - 1) * (context - 1) + padding);
+        assert!(padding < 4 * L);
 
         // Test context overlap.
-        for i in 0..7 {
+        for i in 0..L - 1 {
             for j in 0..context - 1 {
                 assert_eq!(
                     it[it_len - (context - 1) + j].0.as_array()[i],
@@ -655,6 +657,7 @@ fn par_iter_bp_delayed2_fuzz() {
 }
 
 #[test]
+#[cfg(not(feature = "avx512"))]
 fn par_iter_bp_delayed01() {
     let s = PackedSeqVec::from_ascii(b"ACGTAACCGGTTAAACCCGGGTTTAAAAAAAAACGT");
     let PaddedIt { it, padding } = s.as_slice().par_iter_bp_delayed_2(1, Delay(0), Delay(1));
@@ -665,7 +668,7 @@ fn par_iter_bp_delayed01() {
         let z = z.map(|x| pack_char(x) as u32);
         (S::from(x), S::from(y), S::from(z))
     }
-    assert_eq!(padding, 8 * 8 - s.len());
+    assert_eq!(padding, 8 * L - s.len());
     assert_eq!(
         it,
         vec![

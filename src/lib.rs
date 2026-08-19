@@ -114,6 +114,7 @@
 pub mod intrinsics {
     mod transpose;
     pub use transpose::transpose;
+    pub use transpose::transpose_back;
 }
 
 mod traits;

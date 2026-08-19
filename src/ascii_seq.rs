@@ -285,7 +285,7 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
 
         // Boxed, so it doesn't consume precious registers.
         // Without this, cur is not always inlined into a register.
-        let mut buf = Box::new([S::ZERO; L]);
+        let mut buf = Box::new([S::ZERO; 8]);
 
         let par_len = if num_kmers == 0 { 0 } else { n + context - 1 };
         let it = (0..par_len).map(
@@ -294,12 +294,13 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
                 if i % 4 == 0 {
                     if i % 32 == 0 {
                         // Read a u256 for each lane containing the next 32 characters.
-                        let data: [S; L] = from_fn(
+                        let data: [u32x8; L] = from_fn(
                             #[inline(always)]
                             |lane| unsafe {
-                                std::mem::transmute::<_, u32x8>(
-                                    read_slice_32(self.0, offsets[lane] + i),
-                                )
+                                std::mem::transmute::<_, u32x8>(read_slice_32(
+                                    self.0,
+                                    offsets[lane] + i,
+                                ))
                             },
                         );
                         *buf = transpose(data);
@@ -358,17 +359,18 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
                 if i % 4 == 0 {
                     if i % 32 == 0 {
                         // Read a u256 for each lane containing the next 32 characters.
-                        let data: [S; L] = from_fn(
+                        let data: [u32x8; L] = from_fn(
                             #[inline(always)]
                             |lane| unsafe {
-                                std::mem::transmute::<_, u32x8>(
-                                    read_slice_32(self.0, offsets[lane] + i),
-                                )
+                                std::mem::transmute::<_, u32x8>(read_slice_32(
+                                    self.0,
+                                    offsets[lane] + i,
+                                ))
                             },
                         );
                         unsafe {
-                            let mut_array: &mut [S; L] = buf
-                                .get_unchecked_mut(write_idx..write_idx + L)
+                            let mut_array: &mut [S; 8] = buf
+                                .get_unchecked_mut(write_idx..write_idx + 8)
                                 .try_into()
                                 .unwrap_unchecked();
                             *mut_array = transpose(data);
@@ -438,17 +440,18 @@ impl<'s> Seq<'s> for AsciiSeq<'s> {
                 if i % 4 == 0 {
                     if i % 32 == 0 {
                         // Read a u256 for each lane containing the next 32 characters.
-                        let data: [S; L] = from_fn(
+                        let data: [u32x8; L] = from_fn(
                             #[inline(always)]
                             |lane| unsafe {
-                                std::mem::transmute::<_, u32x8>(
-                                    read_slice_32(self.0, offsets[lane] + i),
-                                )
+                                std::mem::transmute::<_, u32x8>(read_slice_32(
+                                    self.0,
+                                    offsets[lane] + i,
+                                ))
                             },
                         );
                         unsafe {
-                            let mut_array: &mut [S; L] = buf
-                                .get_unchecked_mut(write_idx..write_idx + L)
+                            let mut_array: &mut [S; 8] = buf
+                                .get_unchecked_mut(write_idx..write_idx + 8)
                                 .try_into()
                                 .unwrap_unchecked();
                             *mut_array = transpose(data);

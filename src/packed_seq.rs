@@ -1,13 +1,13 @@
 use core::cell::RefCell;
 use std::ops::{Deref, DerefMut};
 use traits::Seq;
-use wide::u16x8;
+use wide::{u16x8, u32x8};
 
 use crate::{intrinsics::transpose, padded_it::ChunkIt};
 
 use super::*;
 
-type SimdBuf = [S; L];
+type SimdBuf = [S; 8];
 
 struct RecycledBox(Option<Box<SimdBuf>>);
 
@@ -398,11 +398,11 @@ where
 
 /// Read up to 32 bytes starting at idx.
 #[inline(always)]
-pub(crate) unsafe fn read_slice_32_unchecked(seq: &[u8], idx: usize) -> S {
+pub(crate) unsafe fn read_slice_32_unchecked(seq: &[u8], idx: usize) -> u32x8 {
     unsafe {
         let src = seq.as_ptr().add(idx);
         debug_assert!(idx + 32 <= seq.len());
-        std::mem::transmute::<_, *const S>(src).read_unaligned()
+        std::mem::transmute::<_, *const u32x8>(src).read_unaligned()
     }
 }
 
@@ -421,7 +421,6 @@ pub(crate) fn read_slice_32(seq: &[u8], idx: usize) -> wide::u8x32 {
         }
     }
 }
-
 
 /// Read up to 16 bytes starting at idx.
 #[allow(unused)]
@@ -682,7 +681,7 @@ where
     Bits<B>: SupportedBits,
 {
     #[inline(always)]
-    pub fn par_iter_bp_with_buf<BUF: DerefMut<Target = [S; L]>>(
+    pub fn par_iter_bp_with_buf<BUF: DerefMut<Target = [S; 8]>>(
         self,
         context: usize,
         mut buf: BUF,
@@ -725,7 +724,7 @@ where
                     if i % Self::C32 == 0 {
                         if i % Self::C256 == 0 {
                             // Read a u256 for each lane containing the next 128 characters.
-                            let data: [S; L] = from_fn(
+                            let data: [u32x8; L] = from_fn(
                                 #[inline(always)]
                                 |lane| unsafe {
                                     read_slice_32_unchecked(
@@ -845,7 +844,7 @@ where
                     if i % Self::C32 == 0 {
                         if i % Self::C256 == 0 {
                             // Read a u256 for each lane containing the next 128 characters.
-                            let data: [S; L] = from_fn(
+                            let data: [u32x8; L] = from_fn(
                                 #[inline(always)]
                                 |lane| unsafe {
                                     read_slice_32_unchecked(
@@ -855,8 +854,8 @@ where
                                 },
                             );
                             unsafe {
-                                *TryInto::<&mut [S; L]>::try_into(
-                                    buf.get_unchecked_mut(write_idx..write_idx + L),
+                                *TryInto::<&mut [S; 8]>::try_into(
+                                    buf.get_unchecked_mut(write_idx..write_idx + 8),
                                 )
                                 .unwrap_unchecked() = transpose(data);
                             }
@@ -996,7 +995,7 @@ where
                     if i % Self::C32 == 0 {
                         if i % Self::C256 == 0 {
                             // Read a u256 for each lane containing the next 128 characters.
-                            let data: [S; L] = from_fn(
+                            let data: [u32x8; L] = from_fn(
                                 #[inline(always)]
                                 |lane| unsafe {
                                     read_slice_32_unchecked(
@@ -1006,8 +1005,8 @@ where
                                 },
                             );
                             unsafe {
-                                *TryInto::<&mut [S; L]>::try_into(
-                                    buf.get_unchecked_mut(write_idx..write_idx + L),
+                                *TryInto::<&mut [S; 8]>::try_into(
+                                    buf.get_unchecked_mut(write_idx..write_idx + 8),
                                 )
                                 .unwrap_unchecked() = transpose(data);
                             }

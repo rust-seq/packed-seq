@@ -1,14 +1,71 @@
 #![allow(unused)]
 
-use wide::u32x4;
-use crate::{L, S};
+use wide::{u32x4, u32x8};
+
+/// NOTE: In this file, we *always* deal with u32x8, also under AVX512.
+type S = u32x8;
+const L: usize = 8;
 
 /// Transpose an 8x8 matrix of 8 `u32x8` SIMD elements.
 /// <https://stackoverflow.com/questions/25622745/transpose-an-8x8-float-using-avx-avx2>
+///
+/// For AVX-512, this takes the next 32 bytes of every lane and gives back a `[S; 8]`.
 // TODO: Investigate other transpose functions mentioned there?
 #[inline(always)]
-pub fn transpose(m: [S; L]) -> [S; L] {
+#[cfg(not(feature = "avx512"))]
+pub fn transpose(m: [u32x8; 8]) -> [u32x8; 8] {
     _transpose(m)
+}
+
+/// Transpose an 8x8 matrix of 8 `u32x8` SIMD elements.
+/// <https://stackoverflow.com/questions/25622745/transpose-an-8x8-float-using-avx-avx2>
+///
+/// For AVX-512, this takes the next 32 bytes of every lane and gives back a `[S; 8]`.
+// TODO: Investigate other transpose functions mentioned there?
+#[inline(always)]
+#[cfg(feature = "avx512")]
+pub fn transpose(m: [u32x8; 16]) -> [wide::u32x16; 8] {
+    // Call _transpose on the first 8 lanes, then on the next 8 lanes, and combine the results.
+    let m0 = _transpose(m[0..8].try_into().unwrap());
+    let m1 = _transpose(m[8..16].try_into().unwrap());
+    // Create 8 u32x16 by taking 8 lanes from m0 and 8 lanes from m1.
+    core::array::from_fn(|i| {
+        let a = m0[i].to_array();
+        let b = m1[i].to_array();
+        wide::u32x16::new(core::array::from_fn(
+            |j| {
+                if j < 8 { a[j] } else { b[j - 8] }
+            },
+        ))
+    })
+}
+
+/// Transpose an 8x8 matrix of 8 `u32x8` SIMD elements.
+///
+/// For AVX-512, this goes from `[u32x16; 8]` to `[u32x8; 16]`.
+#[inline(always)]
+#[cfg(not(feature = "avx512"))]
+pub fn transpose_back(m: [u32x8; 8]) -> [u32x8; 8] {
+    _transpose(m)
+}
+
+/// Transpose an 8x8 matrix of 8 `u32x8` SIMD elements.
+///
+/// For AVX-512, this goes from `[u32x16; 8]` to `[u32x8; 16]`.
+#[inline(always)]
+#[cfg(feature = "avx512")]
+pub fn transpose_back(m: [wide::u32x16; 8]) -> [u32x8; 16] {
+    let m0: [u32x8; 8] =
+        core::array::from_fn(|i| S::new(core::array::from_fn(|j| m[i].to_array()[j])));
+    let m1: [u32x8; 8] =
+        core::array::from_fn(|i| S::new(core::array::from_fn(|j| m[i].to_array()[8 + j])));
+    // Call _transpose on the first 8 lanes, then on the next 8 lanes, and combine the results.
+    let m0 = _transpose(m0);
+    let m1 = _transpose(m1);
+    [
+        m0[0], m0[1], m0[2], m0[3], m0[4], m0[5], m0[6], m0[7], m1[0], m1[1], m1[2], m1[3], m1[4],
+        m1[5], m1[6], m1[7],
+    ]
 }
 
 /// A utility function for creating masks to use with Intel shuffle and
@@ -20,9 +77,8 @@ const fn _mm_shuffle(z: u32, y: u32, x: u32, w: u32) -> i32 {
     ((z << 6) | (y << 4) | (x << 2) | w) as i32
 }
 
-// NOTE: AVX is sufficient here. AVX2 is not needed.
 #[inline(always)]
-#[cfg(target_feature = "avx")]
+#[cfg(all(target_feature = "avx"))]
 fn _transpose(m: [S; L]) -> [S; L] {
     unsafe {
         #[cfg(target_arch = "x86")]
@@ -128,7 +184,7 @@ fn transpose_4x4_neon(m0: u32x4, m1: u32x4, m2: u32x4, m3: u32x4) -> [u32x4; 4] 
 }
 
 #[inline(always)]
-#[cfg(not(any(target_feature = "avx", target_feature = "neon")))]
+#[cfg(all(not(any(target_feature = "avx", target_feature = "neon"))))]
 fn _transpose(m: [S; L]) -> [S; L] {
     unsafe {
         let m = m.map(|v| v.to_array());
@@ -141,6 +197,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(not(feature = "avx512"))]
     fn test_transpose() {
         let m = [
             S::new([0, 1, 2, 3, 4, 5, 6, 7]),
