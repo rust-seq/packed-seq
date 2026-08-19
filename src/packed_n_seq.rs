@@ -87,9 +87,7 @@ impl PackedNSeqVec {
             let t_simd = u8x32::splat(t);
             let ambiguous = ambiguous.seq.as_chunks_mut::<4>().0;
             for i in (0..quality.len()).step_by(32) {
-                let chunk = u8x32::from(unsafe {
-                    std::mem::transmute::<_, u8x32>(read_slice_32(quality, i))
-                });
+                let chunk = read_slice_32(quality, i);
 
                 let mask = t_simd.simd_lt(chunk).to_bitmask() as u32;
                 let ambi = &mut ambiguous[i / 32];
@@ -126,8 +124,7 @@ impl PackedNSeqVec {
 
         let ambiguous = self.ambiguous.seq[idx / 8..].as_chunks_mut::<4>().0;
         for i in (0..quality.len()).step_by(32) {
-            let chunk =
-                u8x32::from(unsafe { std::mem::transmute::<_, u8x32>(read_slice_32(quality, i)) });
+            let chunk = read_slice_32(quality, i);
 
             let mask = t_simd.simd_lt(chunk).to_bitmask() as u32;
             let ambi = &mut ambiguous[i / 32];

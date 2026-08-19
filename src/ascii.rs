@@ -1,4 +1,5 @@
 use crate::{intrinsics::transpose, packed_seq::read_slice_32, padded_it::ChunkIt};
+use wide::u32x8;
 
 use super::*;
 
@@ -104,7 +105,11 @@ impl Seq<'_> for &[u8] {
                         // Read a u256 for each lane containing the next 32 characters.
                         let data: [S; L] = from_fn(
                             #[inline(always)]
-                            |lane| read_slice_32(self, offsets[lane] + i),
+                            |lane| unsafe {
+                                std::mem::transmute::<_, u32x8>(
+                                    read_slice_32(self, offsets[lane] + i),
+                                )
+                            },
                         );
                         *buf = transpose(data);
                     }
@@ -161,7 +166,11 @@ impl Seq<'_> for &[u8] {
                         // Read a u256 for each lane containing the next 32 characters.
                         let data: [S; L] = from_fn(
                             #[inline(always)]
-                            |lane| read_slice_32(self, offsets[lane] + i),
+                            |lane| unsafe {
+                                std::mem::transmute::<_, u32x8>(
+                                    read_slice_32(self, offsets[lane] + i),
+                                )
+                            },
                         );
                         unsafe {
                             let mut_array: &mut [S; L] = buf
@@ -234,7 +243,11 @@ impl Seq<'_> for &[u8] {
                         // Read a u256 for each lane containing the next 32 characters.
                         let data: [S; L] = from_fn(
                             #[inline(always)]
-                            |lane| read_slice_32(self, offsets[lane] + i),
+                            |lane| unsafe {
+                                std::mem::transmute::<_, u32x8>(
+                                    read_slice_32(self, offsets[lane] + i),
+                                )
+                            },
                         );
                         unsafe {
                             let mut_array: &mut [S; L] = buf

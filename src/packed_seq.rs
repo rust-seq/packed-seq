@@ -408,19 +408,20 @@ pub(crate) unsafe fn read_slice_32_unchecked(seq: &[u8], idx: usize) -> S {
 
 /// Read up to 32 bytes starting at idx.
 #[inline(always)]
-pub(crate) fn read_slice_32(seq: &[u8], idx: usize) -> S {
+pub(crate) fn read_slice_32(seq: &[u8], idx: usize) -> wide::u8x32 {
     unsafe {
         let src = seq.as_ptr().add(idx);
         if idx + 32 <= seq.len() {
-            std::mem::transmute::<_, *const S>(src).read_unaligned()
+            std::mem::transmute::<_, *const wide::u8x32>(src).read_unaligned()
         } else {
             let num_bytes = seq.len().saturating_sub(idx);
             let mut result = [0u8; 32];
             std::ptr::copy_nonoverlapping(src, result.as_mut_ptr(), num_bytes);
-            std::mem::transmute(result)
+            wide::u8x32::from(result)
         }
     }
 }
+
 
 /// Read up to 16 bytes starting at idx.
 #[allow(unused)]
