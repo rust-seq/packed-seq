@@ -24,14 +24,16 @@ pyo3 = { version = "0.25", features = ["extension-module"], optional = true }
 # Optional, for PackedEfNSeqVec
 sux = { version = "0.14", optional = true }
 # Optional, for reading PackedSeq[N]Vec directly from a file
-needletail = { version = "0.7", optional = true }
+needletail = { version = "0.7", optional = true, default_features = false }
 
 [features]
 # Also needed for tests.
-default = ["rand"]
+default = ["rand", "file_io"]
 
 # Enables functions to read PackedNSeq directly from a file.
-file_io = ["needletail"]
+file_io = ["needletail","needletail/bzip2", "needletail/flate2", "needletail/zstd" ]
+# The xz2 feature must be enabled separately because it can lead to conflicting library imports of lzma.
+file_io_xz = ["needletail/xz2"]
 
 # Enables PackedEfNSeq
 ef_seq = ["sux"]
