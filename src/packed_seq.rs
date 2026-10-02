@@ -1167,6 +1167,8 @@ where
     /// For `PackedSeqVec` (2-bit encoding): map ASCII `ACGT` (and `acgt`) to DNA `0132` in that order.
     /// Other characters are silently mapped into `0..4`.
     ///
+    /// Returns the range of the newly added sequence in the packed representation.
+    ///
     /// Uses the BMI2 `pext` instruction when available, based on the
     /// `n_to_bits_pext` method described at
     /// <https://github.com/Daniel-Liu-c0deb0t/cute-nucleotides>.
@@ -1393,6 +1395,22 @@ where
         assert!(len <= seq.len() * Self::C8);
         seq.resize(len.div_ceil(Self::C8) + PADDING, 0);
         Self { seq, len }
+    }
+
+    /// Read a fasta/fastq file at the given path into a `PackedSeq`.
+    /// Returns the sequence as well as the slices of all records.
+    #[cfg(feature = "file_io")]
+    pub fn from_fastx(path: &std::path::Path) -> (Self, Vec<Range<usize>>) {
+        let mut seq = Self::default();
+        let mut ranges = vec![];
+
+        let mut reader = needletail::parse_fastx_file(&path).unwrap();
+        while let Some(record) = reader.next() {
+            let seqrec = record.expect("Invalid FASTA/Q record");
+            ranges.push(seq.push_ascii(&seqrec.seq()));
+        }
+
+        (seq, ranges)
     }
 }
 
