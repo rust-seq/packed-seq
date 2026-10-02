@@ -165,6 +165,8 @@ where
     const C256: usize = 256 / B;
     /// Max length of a kmer that can be read as a single u64.
     const K64: usize = (64 - 8) / B + 1;
+    /// Max length of a kmer that can be read as a single u128.
+    const K128: usize = (128 - 8) / B + 1;
 }
 
 /// Convenience constants.
@@ -493,15 +495,20 @@ where
     }
 
     /// Convert a short sequence (kmer) to a packed representation as `u128`.
-    /// Panics if `self` is longer than 64 characters.
+    /// Panics if `self` is longer than 61 characters (for B=2) and the read spans more than 16 bytes.
     #[inline(always)]
     fn as_u128(&self) -> u128 {
-        assert!(
-            self.len() <= (128 - 8) / B + 1,
-            "Sequences >61 long cannot be read with a single unaligned u128 read."
-        );
-
         let mask = u128::MAX >> (128 - B * self.len());
+
+        // Sequences >61 long cannot be read with a single unaligned u128 read.
+        if self.len() > Self::K128 {
+            assert!(self.len() <= 128 / B);
+            if self.offset + self.len() > 128 / B {
+                let x = unsafe { (self.seq.as_ptr() as *const u128).read_unaligned() };
+                let y = unsafe { self.seq.as_ptr().offset(16).read() as u128 };
+                return ((x >> (B * self.offset)) | (y << (128 - B * self.offset))) & mask;
+            }
+        }
 
         // The unaligned read is OK, because we ensure that the underlying `PackedSeqVecBase::seq` always
         // has at least 48 bytes of padding at the end.
