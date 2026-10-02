@@ -3,6 +3,12 @@
 <!-- next-header -->
 
 ## git
+- Support `k` equal to 62, 63, and 64 in `PackedSeq::as_u128`.
+- Publicly expose `revcomp_u64` and `revcomp_u128` functions.
+- Add `PackedSeqVec::from_fastx` to read a fasta file into a single string with
+  ranges pointing into the string.
+- Avoid the `needletail/xz` feature in the `file_io` flag, since it leads to broken
+  builds with mixed `liblzma` versions.
 
 ## 5.0.0
 - Bump `wide` to 1.5.0, potential breaking syntax changes:
