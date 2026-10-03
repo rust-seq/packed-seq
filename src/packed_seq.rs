@@ -1182,8 +1182,13 @@ where
             ),
         }
 
+        if seq.is_empty() {
+            return self.len..self.len;
+        }
+
         self.seq
             .resize((self.len + seq.len()).div_ceil(Self::C8) + PADDING, 0);
+
         let start_aligned = self.len.next_multiple_of(Self::C8);
         let start = self.len;
         let len = seq.len();
