@@ -398,6 +398,30 @@ where
     }
 }
 
+impl<'s> PackedSeqBase<'s, 2> {
+    /// Iterate over the reverse complement as packed 2-bit bases.
+    #[inline(always)]
+    pub fn iter_bp_rc(self) -> impl ExactSizeIterator<Item = u8> + 's {
+        (0..self.len)
+            .rev()
+            .map(move |i| complement_base(self.get(i)))
+    }
+
+    /// Append this packed slice as ASCII `ACTG` bases to `out`.
+    pub fn unpack_into(&self, out: &mut Vec<u8>) {
+        out.extend((0..self.len).map(|i| unpack_base(self.get(i))));
+    }
+
+    /// Append this the reverse complement packed slice as ASCII `ACTG` bases to `out`.
+    pub fn unpack_rc_into(&self, out: &mut Vec<u8>) {
+        out.extend(
+            (0..self.len)
+                .rev()
+                .map(|i| unpack_base(complement_base(self.get(i)))),
+        );
+    }
+}
+
 /// Read up to 32 bytes starting at idx.
 #[inline(always)]
 pub(crate) unsafe fn read_slice_32_unchecked(seq: &[u8], idx: usize) -> u32x8 {

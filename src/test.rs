@@ -147,6 +147,42 @@ fn pack_word() {
 }
 
 #[test]
+fn unpack_into_ascii() {
+    let ascii = b"ACGTTCGATGCCATAGGTTACCAAGTACGATCTAGCATGGTCAGTCA";
+    let packed = PackedSeqVec::from_ascii(ascii);
+    for start in 0..=ascii.len() {
+        for end in start..=ascii.len() {
+            let slice = packed.slice(start..end);
+            let mut forward = b"prefix".to_vec();
+            slice.unpack_into(&mut forward);
+            assert_eq!(&forward[..6], b"prefix");
+            assert_eq!(&forward[6..], &ascii[start..end]);
+
+            let mut reverse = b"prefix".to_vec();
+            slice.unpack_rc_into(&mut reverse);
+            let expected: Vec<_> = ascii[start..end]
+                .iter()
+                .rev()
+                .map(|&base| complement_char(base))
+                .collect();
+            assert_eq!(&reverse[..6], b"prefix");
+            assert_eq!(&reverse[6..], expected);
+
+            let mut iter = slice.iter_bp_rc();
+            assert_eq!(iter.len(), end - start);
+            assert_eq!(
+                iter.by_ref().collect::<Vec<_>>(),
+                expected
+                    .iter()
+                    .map(|&base| pack_char(base))
+                    .collect::<Vec<_>>()
+            );
+            assert_eq!(iter.len(), 0);
+        }
+    }
+}
+
+#[test]
 fn pack_u128() {
     let packed = PackedSeqVec::from_ascii(
         b"ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT",
@@ -327,6 +363,25 @@ fn push_ascii_unaligned() {
     let packed2 = PackedSeqVec::from_ascii(seq);
     let expected = packed2.as_slice();
     assert!(slice.eq(&expected));
+}
+
+#[test]
+fn push_empty_ascii() {
+    let mut packed = PackedSeqVec::from_ascii(b"ACG");
+    assert_eq!(packed.push_ascii(b""), 3..3);
+    assert_eq!(packed.len(), 3);
+    assert_eq!(packed.as_slice().unpack(), b"ACG");
+    assert_eq!(packed.push_ascii(b"CCC"), 3..6);
+    assert_eq!(packed.as_slice().unpack(), b"ACGCCC");
+
+    let mut ambiguous = BitSeqVec::from_ascii(b"ACN");
+    assert_eq!(ambiguous.push_ascii(b""), 3..3);
+    assert_eq!(ambiguous.len(), 3);
+    assert_eq!(ambiguous.push_ascii(b"NAN"), 3..6);
+    assert_eq!(
+        ambiguous.as_slice().iter_bp().collect::<Vec<_>>(),
+        [0, 0, 1, 1, 0, 1]
+    );
 }
 
 #[test]
