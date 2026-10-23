@@ -1184,6 +1184,14 @@ where
         self.seq.resize(self.len.div_ceil(Self::C8), 0);
         // Extend.
         self.seq.extend(seq.seq);
+
+        // For the ambiguous N-seq, mark the entire gap as ambiguous.
+        if B == 1 {
+            if self.len % 8 != 0 {
+                self.seq[self.len / 8] |= u8::MAX << (self.len % 8);
+            }
+            self.seq[self.len.div_ceil(8)] |= (1u8 << seq.offset) - 1;
+        }
         self.len = end;
         start..end
     }

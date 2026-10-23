@@ -119,16 +119,8 @@ impl PackedNSeqVec {
         let t = b'!' + min_qual;
         let t_simd = i8x32::splat(t as i8);
 
-        let mut idx = r2.start;
-        let mut i = 0;
-        while idx % 8 != 0 && i < quality.len() {
-            self.ambiguous.seq[idx / 8] |= ((quality[i] < t) as u8) << (idx % 8);
-            idx += 1;
-            i += 1;
-        }
-        let quality = &quality[i..];
-
-        let ambiguous = self.ambiguous.seq[idx / 8..].as_chunks_mut::<4>().0;
+        let shift = r2.start % 8;
+        let ambiguous = &mut self.ambiguous.seq[r2.start / 8..];
         for i in (0..quality.len()).step_by(32) {
             let chunk =
                 i8x32::from(unsafe { std::mem::transmute::<_, i8x32>(read_slice_32(quality, i)) });
@@ -138,8 +130,11 @@ impl PackedNSeqVec {
             if remaining < 32 {
                 mask &= (1u32 << remaining) - 1;
             }
-            let ambi = &mut ambiguous[i / 32];
-            *ambi = (u32::from_ne_bytes(*ambi) | mask).to_ne_bytes();
+            let mask = (mask as u64) << shift;
+            let offset = i / 8;
+            let word = u32::from_le_bytes(ambiguous[offset..offset + 4].try_into().unwrap());
+            ambiguous[offset..offset + 4].copy_from_slice(&(word | mask as u32).to_le_bytes());
+            ambiguous[offset + 4] |= (mask >> 32) as u8;
         }
     }
 
@@ -174,6 +169,54 @@ impl PackedNSeqVec {
         }
 
         seq
+    }
+
+    /// Read FASTA/FASTQ using Helicase's parallel reader, separating records with `N`.
+    ///
+    /// Does *not* preserve the order or records!
+    ///
+    /// Chunk boundaries may contain extra `N`s for byte alignment.
+    #[cfg(feature = "file_io")]
+    pub fn from_fastx_parallel(path: &std::path::Path, num_threads: usize) -> Self {
+        use helicase::HelicaseParser;
+
+        const CONFIG: helicase::Config = helicase::ParserOptions::default()
+            .ignore_headers()
+            .ignore_quality()
+            .dna_string()
+            .config();
+        helicase::ParallelFastxParser::<CONFIG>::from_file(path)
+            .unwrap()
+            .threads(num_threads)
+            .reduce(
+                |mut parser| {
+                    let mut seq = Self::default();
+                    let mut ascii = Vec::with_capacity(16000);
+                    while let Some(event) = parser.next() {
+                        event?;
+                        ascii.extend_from_slice(parser.get_dna_string());
+                        ascii.push(b'N');
+                        if ascii.len() >= 16000 {
+                            seq.push_ascii(&ascii);
+                            ascii.clear();
+                        }
+                    }
+                    if !ascii.is_empty() {
+                        seq.push_ascii(&ascii);
+                    }
+                    Ok(seq)
+                },
+                |mut seq, chunk| {
+                    // Pad to a multiple of 8, so `seq` and `ambiguous` don't
+                    // have different internal paddings.
+                    let padding = (8 - seq.seq.len() % 8) % 8;
+                    seq.push_ascii(&b"NNNNNNN"[..padding]);
+                    seq.seq.push_seq(chunk.seq.as_slice());
+                    seq.ambiguous.push_seq(chunk.ambiguous.as_slice());
+                    seq
+                },
+            )
+            .unwrap()
     }
 
     /// Read a fasta/fastq file at the given path into a `PackedNSeq`, separating records with `N`.
@@ -213,5 +256,61 @@ impl PackedNSeqVec {
         }
 
         seq
+    }
+
+    /// Read FASTQ using Helicase's parallel reader, separating records with `N`.
+    ///
+    /// Masks non-ACGT bases and qualities below `min_qual`.
+    /// Does *not* preserve the order or records!
+    /// Chunk boundaries may contain extra `N`s for byte alignment.
+    #[cfg(feature = "file_io")]
+    pub fn from_fastq_with_quality_parallel(
+        path: &std::path::Path,
+        min_qual: u8,
+        num_threads: usize,
+    ) -> Self {
+        use helicase::HelicaseParser;
+
+        const CONFIG: helicase::Config = helicase::ParserOptions::default()
+            .ignore_headers()
+            .dna_string()
+            .compute_quality()
+            .config();
+        helicase::ParallelFastxParser::<CONFIG>::from_file(path)
+            .unwrap()
+            .threads(num_threads)
+            .reduce(
+                |mut parser| {
+                    let mut seq = Self::default();
+                    let mut ascii = Vec::with_capacity(16000);
+                    let mut quality = Vec::with_capacity(16000);
+                    while let Some(event) = parser.next() {
+                        event?;
+                        ascii.extend_from_slice(parser.get_dna_string());
+                        ascii.push(b'N');
+                        quality.extend_from_slice(
+                            parser.get_quality().expect("Expected FASTQ quality scores"),
+                        );
+                        quality.push(0);
+                        if ascii.len() >= 16000 {
+                            seq.push_from_ascii_and_quality(&ascii, &quality, min_qual);
+                            ascii.clear();
+                            quality.clear();
+                        }
+                    }
+                    if !ascii.is_empty() {
+                        seq.push_from_ascii_and_quality(&ascii, &quality, min_qual);
+                    }
+                    Ok(seq)
+                },
+                |mut seq, chunk| {
+                    let padding = (8 - seq.seq.len() % 8) % 8;
+                    seq.push_ascii(&b"NNNNNNN"[..padding]);
+                    seq.seq.push_seq(chunk.seq.as_slice());
+                    seq.ambiguous.push_seq(chunk.ambiguous.as_slice());
+                    seq
+                },
+            )
+            .unwrap()
     }
 }

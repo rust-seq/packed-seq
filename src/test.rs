@@ -896,6 +896,26 @@ fn as_u64_read_unaligned_does_not_segfault() {
 }
 
 #[test]
+fn bit_seq_push_seq_marks_alignment_padding_ambiguous() {
+    let source = BitSeqVec::from_ascii(b"ACNACGTNACGTNACGTNACGTNACGTN");
+    for len in 0..16 {
+        for offset in 0..8 {
+            for slice_len in [0, 1, 7, 9] {
+                let mut packed = BitSeqVec::from_ascii(&b"NACGTNACGTNACGTN"[..len]);
+                let mut expected: Vec<_> = packed.as_slice().iter_bp().collect();
+                let slice = source.slice(offset..offset + slice_len);
+                let start = len.next_multiple_of(8) + offset;
+                expected.resize(start, 1);
+                expected.extend(slice.iter_bp());
+
+                assert_eq!(packed.push_seq(slice), start..start + slice_len);
+                assert_eq!(packed.as_slice().iter_bp().collect::<Vec<_>>(), expected);
+            }
+        }
+    }
+}
+
+#[test]
 fn packed_seq_push_seq() {
     let mut packed = PackedSeqVec::default();
     let mut rng = rand::rng();

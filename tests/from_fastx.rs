@@ -33,7 +33,6 @@ fn check(input: &Input, records: &[&[u8]], expected_ranges: &[Range<usize>]) {
     let sequential = PackedSeqVec::from_fastx(&input.0);
     assert_eq!(sequential.1, expected_ranges);
     check_output(sequential, records);
-    check_output(PackedSeqVec::from_fastx(&input.0), records);
 }
 
 fn check_output((packed, ranges): (PackedSeqVec, Vec<Range<usize>>), records: &[&[u8]]) {
@@ -108,6 +107,31 @@ fn packed_n_fastx_preserves_ambiguity_and_record_separators() {
         assert_eq!(actual.seq.len(), expected.seq.len());
         assert_eq!(actual.seq.into_raw(), expected.seq.into_raw());
         assert_eq!(actual.ambiguous.into_raw(), expected.ambiguous.into_raw());
+    }
+}
+
+#[test]
+fn appended_quality_masks_handle_all_bit_offsets() {
+    for offset in 0..8 {
+        for len in 0..70 {
+            let mut packed = PackedNSeqVec::from_ascii(&b"ACGTACGT"[..offset]);
+            let bases: Vec<_> = (0..len).map(|i| b"ACGTN"[i % 5]).collect();
+            let quality: Vec<_> = (0..len).map(|i| b"456!I"[i % 5]).collect();
+            packed.push_from_ascii_and_quality(&bases, &quality, 20);
+            // A later append must not inherit any mask bits from SIMD padding.
+            packed.push_from_ascii_and_quality(b"ACGT", b"IIII", 20);
+            let expected: Vec<_> = std::iter::repeat_n(0, offset)
+                .chain(
+                    (0..len).map(|i| (!b"ACGTacgt".contains(&bases[i]) || quality[i] < b'5') as u8),
+                )
+                .chain([0; 4])
+                .collect();
+            assert_eq!(
+                packed.ambiguous.as_slice().iter_bp().collect::<Vec<_>>(),
+                expected,
+                "offset {offset}, length {len}"
+            );
+        }
     }
 }
 
