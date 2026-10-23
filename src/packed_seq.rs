@@ -1292,6 +1292,29 @@ where
                     }
                 }
             }
+
+            #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+            {
+                use core::arch::wasm32::*;
+
+                last = unaligned + (len - unaligned) / 16 * 16;
+
+                for i in (unaligned..last).step_by(16) {
+                    unsafe {
+                        let ascii = v128_load(seq.as_ptr().add(i) as *const v128);
+                        let bits = v128_and(u8x16_shr(ascii, 1), u8x16_splat(3));
+                        let bits = v128_or(bits, u32x4_shr(bits, 6));
+                        let bits = v128_or(bits, u32x4_shr(bits, 12));
+                        let packed = u8x16_swizzle(
+                            bits,
+                            i8x16(0, 4, 8, 12, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1),
+                        );
+                        v128_store32_lane::<0>(packed, self.seq.as_mut_ptr().add(idx) as *mut u32);
+                        idx += 4;
+                        self.len += 16;
+                    }
+                }
+            }
         }
 
         if B == 1 {
@@ -1381,6 +1404,34 @@ where
                         self.seq[idx..(idx + 8)].copy_from_slice(&packed_bytes.to_le_bytes());
                         idx += 8;
                         self.len += 64;
+                    }
+                }
+            }
+
+            #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+            {
+                use core::arch::wasm32::*;
+                use core::mem::transmute;
+
+                last = unaligned + (len - unaligned) / 16 * 16;
+
+                let upper_mask = u8x16_splat(!(b'a' - b'A'));
+                let two_bits_mask = u8x16_splat(6);
+                let table: v128 = unsafe { transmute(*b"AxCxTxGxxxxxxxxx") };
+
+                for i in (unaligned..last).step_by(16) {
+                    unsafe {
+                        let chars = v128_load(seq.as_ptr().add(i) as *const v128);
+                        let chars = v128_and(chars, upper_mask);
+                        let lossy_encoded = v128_and(chars, two_bits_mask);
+                        let lookup = u8x16_swizzle(table, lossy_encoded);
+                        let packed_bytes = !u8x16_bitmask(u8x16_eq(chars, lookup));
+
+                        self.seq
+                            .get_unchecked_mut(idx..(idx + 2))
+                            .copy_from_slice(&packed_bytes.to_le_bytes());
+                        idx += 2;
+                        self.len += 16;
                     }
                 }
             }
