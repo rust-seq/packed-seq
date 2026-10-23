@@ -10,6 +10,8 @@
 - Avoid the `needletail/xz` feature in the `file_io` flag, since it leads to broken
   builds with mixed `liblzma` versions.
 - Add `PackedSeq::iter_bp_rc`, `PackedSeq::unpack_into`, `PackedSeq::unpack_rc_into`.
+- Switch from `needletail` to `helicase`; add `Packed[N]Seq::from_fastx_parallel`.
+- Fix bugs in `PackedNSeq::from_fastq_with_quality`.
 
 ## 5.0.0
 - Bump `wide` to 1.5.0, potential breaking syntax changes:
