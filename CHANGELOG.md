@@ -3,15 +3,16 @@
 <!-- next-header -->
 
 ## git
-- Support `k` equal to 62, 63, and 64 in `PackedSeq::as_u128`.
-- Publicly expose `revcomp_u64` and `revcomp_u128` functions.
+New:
 - Add `PackedSeqVec::from_fastx` to read a fasta file into a single string with
-  ranges pointing into the string.
-- Avoid the `needletail/xz` feature in the `file_io` flag, since it leads to broken
-  builds with mixed `liblzma` versions.
-- Add `PackedSeq::iter_bp_rc`, `PackedSeq::unpack_into`, `PackedSeq::unpack_rc_into`.
+  ranges pointing into the string, alongside existing `PackedNSeq::from_fastx`.
 - Switch from `needletail` to `helicase`; add `Packed[N]Seq::from_fastx_parallel`.
 - Fix bugs in `PackedNSeq::from_fastq_with_quality`.
+
+Minor conveniences:
+- Add `PackedSeq::iter_bp_rc`, `PackedSeq::unpack_into`, `PackedSeq::unpack_rc_into`.
+- Publicly expose `revcomp_u64` and `revcomp_u128` functions.
+- Support `k` equal to 62, 63, and 64 in `PackedSeq::as_u128`.
 
 ## 5.0.0
 - Bump `wide` to 1.5.0, potential breaking syntax changes:
