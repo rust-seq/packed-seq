@@ -27,3 +27,19 @@ jobs:
         run: cargo build --verbose
       - name: Run tests
         run: cargo test --verbose
+
+  test-wasm:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        simd128: ["-simd128", "+simd128"]
+    env:
+      RUSTFLAGS: -C target-feature=${{ matrix.simd128 }}
+      CARGO_TARGET_WASM32_WASIP1_RUNNER: node --no-warnings scripts/wasi-node.mjs
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup target add wasm32-wasip1 wasm32-unknown-unknown
+      - name: Check wasm32-unknown-unknown
+        run: cargo check --verbose --release --lib --no-default-features --features scalar --target wasm32-unknown-unknown
+      - name: Run release tests
+        run: cargo test --verbose --release --no-default-features --features rand,scalar --target wasm32-wasip1
