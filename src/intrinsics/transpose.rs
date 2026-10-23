@@ -62,7 +62,10 @@ fn _transpose(m: [S; 8]) -> [S; 8] {
 }
 
 #[inline(always)]
-#[cfg(target_feature = "neon")]
+#[cfg(any(
+    target_feature = "neon",
+    all(target_arch = "wasm32", target_feature = "simd128")
+))]
 fn _transpose(m: [S; 8]) -> [S; 8] {
     unsafe {
         use core::mem::transmute;
@@ -128,7 +131,30 @@ fn transpose_4x4(m0: u32x4, m1: u32x4, m2: u32x4, m3: u32x4) -> [u32x4; 4] {
 }
 
 #[inline(always)]
-#[cfg(not(any(target_feature = "avx", target_feature = "neon")))]
+#[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
+fn transpose_4x4(m0: u32x4, m1: u32x4, m2: u32x4, m3: u32x4) -> [u32x4; 4] {
+    unsafe {
+        use core::arch::wasm32::{i32x4_shuffle, v128};
+        use core::mem::transmute;
+
+        let zip = |a: v128, b: v128| {
+            (
+                i32x4_shuffle::<0, 4, 1, 5>(a, b),
+                i32x4_shuffle::<2, 6, 3, 7>(a, b),
+            )
+        };
+        let x = zip(transmute(m0), transmute(m2));
+        let y = zip(transmute(m1), transmute(m3));
+        transmute((zip(x.0, y.0), zip(x.1, y.1)))
+    }
+}
+
+#[inline(always)]
+#[cfg(not(any(
+    target_feature = "avx",
+    target_feature = "neon",
+    all(target_arch = "wasm32", target_feature = "simd128")
+)))]
 fn _transpose(m: [S; 8]) -> [S; 8] {
     unsafe {
         let m = m.map(|v| v.to_array());
