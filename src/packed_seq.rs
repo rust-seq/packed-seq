@@ -1295,21 +1295,26 @@ where
 
             #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
             {
-                use core::arch::wasm32::*;
+                use core::mem::transmute as t;
+                use wide::{u8x16, u32x4};
 
                 last = unaligned + (len - unaligned) / 16 * 16;
 
+                let pick_low_bytes = u8x16::new([
+                    0, 4, 8, 12, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+                ]);
+
                 for i in (unaligned..last).step_by(16) {
                     unsafe {
-                        let ascii = v128_load(seq.as_ptr().add(i) as *const v128);
-                        let bits = v128_and(u8x16_shr(ascii, 1), u8x16_splat(3));
-                        let bits = v128_or(bits, u32x4_shr(bits, 6));
-                        let bits = v128_or(bits, u32x4_shr(bits, 12));
-                        let packed = u8x16_swizzle(
-                            bits,
-                            i8x16(0, 4, 8, 12, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1),
-                        );
-                        v128_store32_lane::<0>(packed, self.seq.as_mut_ptr().add(idx) as *mut u32);
+                        let ascii = seq.as_ptr().add(i).cast::<u8x16>().read_unaligned();
+                        let bits: u32x4 = t((ascii >> 1) & u8x16::splat(3));
+                        let bits = bits | (bits >> 6);
+                        let bits = bits | (bits >> 12);
+                        let packed: [u32; 4] =
+                            t(t::<_, u8x16>(bits).shuffle_zeroing(pick_low_bytes));
+                        self.seq
+                            .get_unchecked_mut(idx..(idx + 4))
+                            .copy_from_slice(&packed[0].to_le_bytes());
                         idx += 4;
                         self.len += 16;
                     }
@@ -1410,22 +1415,21 @@ where
 
             #[cfg(all(target_arch = "wasm32", target_feature = "simd128"))]
             {
-                use core::arch::wasm32::*;
-                use core::mem::transmute;
+                use wide::u8x16;
 
                 last = unaligned + (len - unaligned) / 16 * 16;
 
-                let upper_mask = u8x16_splat(!(b'a' - b'A'));
-                let two_bits_mask = u8x16_splat(6);
-                let table: v128 = unsafe { transmute(*b"AxCxTxGxxxxxxxxx") };
+                let upper_mask = u8x16::splat(!(b'a' - b'A'));
+                let two_bits_mask = u8x16::splat(6);
+                let table = u8x16::new(*b"AxCxTxGxxxxxxxxx");
 
                 for i in (unaligned..last).step_by(16) {
                     unsafe {
-                        let chars = v128_load(seq.as_ptr().add(i) as *const v128);
-                        let chars = v128_and(chars, upper_mask);
-                        let lossy_encoded = v128_and(chars, two_bits_mask);
-                        let lookup = u8x16_swizzle(table, lossy_encoded);
-                        let packed_bytes = !u8x16_bitmask(u8x16_eq(chars, lookup));
+                        let chars = seq.as_ptr().add(i).cast::<u8x16>().read_unaligned();
+                        let chars = chars & upper_mask;
+                        let lossy_encoded = chars & two_bits_mask;
+                        let lookup = table.shuffle_zeroing(lossy_encoded);
+                        let packed_bytes = !(chars.simd_eq(lookup).to_bitmask() as u16);
 
                         self.seq
                             .get_unchecked_mut(idx..(idx + 2))
