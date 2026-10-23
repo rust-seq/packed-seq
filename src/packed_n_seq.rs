@@ -38,6 +38,58 @@ impl<'s> PackedNSeq<'s> {
 
 /// Implement a subset of `SeqVec` for `PackedNSeqVec`.
 impl PackedNSeqVec {
+    /// Given a bunch of `PackedNSeqVec` chunks, assemble them into a single `PackedNSeqVec` in parallel.
+    #[cfg(feature = "file_io")]
+    fn assemble_parallel_chunks(chunks: Vec<Self>, num_threads: usize) -> Self {
+        let len = chunks
+            .iter()
+            .map(|chunk| chunk.seq.len().next_multiple_of(8))
+            .sum();
+        let mut output = Self {
+            seq: PackedSeqVec::from_raw_parts(vec![0; len / 4], len),
+            ambiguous: BitSeqVec::with_len(len),
+        };
+        let mut seq_out = &mut output.seq.seq[..len / 4];
+        let mut mask_out = &mut output.ambiguous.seq[..len / 8];
+        let mut jobs = Vec::with_capacity(chunks.len());
+        for chunk in chunks {
+            let aligned_len = chunk.seq.len().next_multiple_of(8);
+            let (seq_dest, rest) = seq_out.split_at_mut(aligned_len / 4);
+            seq_out = rest;
+            let (mask_dest, rest) = mask_out.split_at_mut(aligned_len / 8);
+            mask_out = rest;
+            jobs.push((chunk, seq_dest, mask_dest));
+        }
+        let jobs = std::sync::Mutex::new(jobs.into_iter());
+        std::thread::scope(|scope| {
+            for _ in 0..num_threads.max(1) {
+                let jobs = &jobs;
+                scope.spawn(move || {
+                    loop {
+                        let job = jobs.lock().unwrap().next();
+                        let Some((chunk, seq_dest, mask_dest)) = job else {
+                            break;
+                        };
+                        let chunk_len = chunk.seq.len();
+                        let seq_bytes = chunk_len.div_ceil(4);
+                        let mask_bytes = chunk_len.div_ceil(8);
+                        seq_dest[..seq_bytes].copy_from_slice(&chunk.seq.seq[..seq_bytes]);
+                        mask_dest[..mask_bytes].copy_from_slice(&chunk.ambiguous.seq[..mask_bytes]);
+                        // Fill alignment padding with N in both representations.
+                        seq_dest[seq_bytes..].fill(u8::MAX);
+                        if chunk_len % 4 != 0 {
+                            seq_dest[seq_bytes - 1] |= u8::MAX << (2 * (chunk_len % 4));
+                        }
+                        if chunk_len % 8 != 0 {
+                            mask_dest[mask_bytes - 1] |= u8::MAX << (chunk_len % 8);
+                        }
+                    }
+                });
+            }
+        });
+        output
+    }
+
     pub fn clear(&mut self) {
         self.seq.clear();
         self.ambiguous.clear();
@@ -185,10 +237,11 @@ impl PackedNSeqVec {
             .ignore_quality()
             .dna_string()
             .config();
-        let output = std::sync::Mutex::new(Self::default());
+        let chunks = std::sync::Mutex::new(Vec::new());
         helicase::ParallelFastxParser::<CONFIG>::from_file(path)
             .unwrap()
             .threads(num_threads)
+            .chunks(num_threads.max(1))
             .for_each(|mut parser| {
                 let mut seq = Self::default();
                 let mut ascii = Vec::with_capacity(16000);
@@ -204,17 +257,12 @@ impl PackedNSeqVec {
                 if !ascii.is_empty() {
                     seq.push_ascii(&ascii);
                 }
-                let mut output = output.lock().unwrap();
-                // Pad to a multiple of 8, so `seq` and `ambiguous` don't
-                // have different internal paddings.
-                let padding = (8 - output.seq.len() % 8) % 8;
-                output.push_ascii(&b"NNNNNNN"[..padding]);
-                output.seq.push_seq(seq.seq.as_slice());
-                output.ambiguous.push_seq(seq.ambiguous.as_slice());
+                chunks.lock().unwrap().push(seq);
                 Ok(())
             })
             .unwrap();
-        output.into_inner().unwrap()
+        let chunks = chunks.into_inner().unwrap();
+        Self::assemble_parallel_chunks(chunks, num_threads)
     }
 
     /// Read a fasta/fastq file at the given path into a `PackedNSeq`, separating records with `N`.
@@ -274,10 +322,11 @@ impl PackedNSeqVec {
             .dna_string()
             .compute_quality()
             .config();
-        let output = std::sync::Mutex::new(Self::default());
+        let chunks = std::sync::Mutex::new(Vec::new());
         helicase::ParallelFastxParser::<CONFIG>::from_file(path)
             .unwrap()
             .threads(num_threads)
+            .chunks(num_threads.max(1))
             .for_each(|mut parser| {
                 let mut seq = Self::default();
                 let mut ascii = Vec::with_capacity(16000);
@@ -299,14 +348,11 @@ impl PackedNSeqVec {
                 if !ascii.is_empty() {
                     seq.push_from_ascii_and_quality(&ascii, &quality, min_qual);
                 }
-                let mut output = output.lock().unwrap();
-                let padding = (8 - output.seq.len() % 8) % 8;
-                output.push_ascii(&b"NNNNNNN"[..padding]);
-                output.seq.push_seq(seq.seq.as_slice());
-                output.ambiguous.push_seq(seq.ambiguous.as_slice());
+                chunks.lock().unwrap().push(seq);
                 Ok(())
             })
             .unwrap();
-        output.into_inner().unwrap()
+        let chunks = chunks.into_inner().unwrap();
+        Self::assemble_parallel_chunks(chunks, num_threads)
     }
 }

@@ -1484,7 +1484,8 @@ impl PackedSeqVecBase<2> {
             .reject_non_actg()
             .config()
             | helicase::config::advanced::MERGE_RECORDS;
-        let output = std::sync::Mutex::new((Vec::new(), Vec::new()));
+        let chunks = std::sync::Mutex::new(Vec::new());
+        // Spawn threads that parse the file in chunks and save the packed data.
         helicase::ParallelFastxParser::<CONFIG>::from_file(path)
             .unwrap()
             .threads(num_threads)
@@ -1499,18 +1500,65 @@ impl PackedSeqVecBase<2> {
                 }
                 let (len, mut seq) = parser.get_dna_packed_owned().into_packed_bytes();
                 seq.truncate(len.div_ceil(Self::C8));
-                let mut output = output.lock().unwrap();
-                let offset = output.0.len() * Self::C8;
-                output.0.extend(seq);
-                output
-                    .1
-                    .extend(ranges.into_iter().map(|r| offset + r.start..offset + r.end));
+                chunks.lock().unwrap().push((seq, ranges));
                 Ok(())
             })
             .unwrap();
-        let (seq, ranges) = output.into_inner().unwrap();
-        let len = seq.len() * Self::C8;
-        (PackedSeqVec::from_raw_parts(seq, len), ranges)
+
+        // Accumulate per-thread lengths.
+        let chunks = chunks.into_inner().unwrap();
+        let total_bytes = chunks.iter().map(|(seq, _)| seq.len()).sum::<usize>();
+        let total_records = chunks.iter().map(|(_, ranges)| ranges.len()).sum::<usize>();
+
+        // Allocate space for the final sequence and the final ranges.
+        let mut seq = vec![0; total_bytes + PADDING];
+        let mut ranges = Vec::<Range<usize>>::with_capacity(total_records);
+
+        // Spawn threads. Each thread takes a chunk of chunks and writes them to the global storage.
+        std::thread::scope(|scope| {
+            let mut seq_out = &mut seq[..total_bytes];
+            let mut ranges_out = &mut ranges.spare_capacity_mut()[..total_records];
+            let mut offset = 0;
+            let threads = num_threads.max(1);
+            let groups = chunks.chunks(chunks.len().div_ceil(threads));
+            for group in groups {
+                let thread_bytes = group.iter().map(|(seq, _)| seq.len()).sum();
+                let thread_records = group.iter().map(|(_, ranges)| ranges.len()).sum();
+
+                // claim space for thread
+                let (mut dest, rest) = seq_out.split_at_mut(thread_bytes);
+                seq_out = rest;
+                let (mut range_dest, rest) = ranges_out.split_at_mut(thread_records);
+                ranges_out = rest;
+
+                let mut base_offset = offset * Self::C8;
+                offset += thread_bytes;
+
+                scope.spawn(move || {
+                    for (chunk, chunk_ranges) in group {
+                        // claim space for chunk
+                        let (chunk_dest, rest) = dest.split_at_mut(chunk.len());
+                        dest = rest;
+                        let (chunk_range_dest, rest) = range_dest.split_at_mut(chunk_ranges.len());
+                        range_dest = rest;
+
+                        // copy chunk
+                        chunk_dest.copy_from_slice(&chunk);
+
+                        // copy ranges
+                        let chunk_offset = base_offset;
+                        base_offset += chunk.len() * Self::C8;
+                        for (dest, range) in chunk_range_dest.iter_mut().zip(chunk_ranges) {
+                            dest.write(chunk_offset + range.start..chunk_offset + range.end);
+                        }
+                    }
+                });
+            }
+        });
+        // SAFETY: The disjoint slices cover all `range_len` slots, and each slot
+        // was initialized above. The scope joins every worker before returning.
+        unsafe { ranges.set_len(total_records) };
+        (Self::from_raw_parts(seq, total_bytes * Self::C8), ranges)
     }
 }
 
