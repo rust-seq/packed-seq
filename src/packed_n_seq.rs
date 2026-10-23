@@ -138,14 +138,20 @@ impl PackedNSeqVec {
     /// Read a fasta/fastq file at the given path into a `PackedNSeq`, separating records with `N`.
     #[cfg(feature = "file_io")]
     pub fn from_fastx(path: &std::path::Path) -> Self {
+        use helicase::{HelicaseParser, input::FromFile};
+
+        const CONFIG: helicase::Config = helicase::ParserOptions::default()
+            .ignore_headers()
+            .dna_string()
+            .config();
         let mut ascii = Vec::with_capacity(16000);
 
         let mut seq = Self::default();
 
-        let mut reader = needletail::parse_fastx_file(&path).unwrap();
-        while let Some(record) = reader.next() {
-            let seqrec = record.expect("Invalid FASTA/Q record");
-            ascii.extend_from_slice(&seqrec.seq());
+        let mut reader = helicase::FastxParser::<CONFIG>::from_file(path).unwrap();
+        while let Some(event) = reader.next() {
+            event.expect("Invalid FASTA/Q record");
+            ascii.extend_from_slice(reader.get_dna_string());
             ascii.push(b'N');
 
             // Convert from ascii dna to packed dna+mask in batches of 16kbp.
@@ -166,16 +172,23 @@ impl PackedNSeqVec {
     /// Low-quality bases are masked out.
     #[cfg(feature = "file_io")]
     pub fn from_fastq_with_quality(path: &std::path::Path, min_qual: u8) -> Self {
+        use helicase::{HelicaseParser, input::FromFile};
+
+        const CONFIG: helicase::Config = helicase::ParserOptions::default()
+            .ignore_headers()
+            .dna_string()
+            .compute_quality()
+            .config();
         let mut ascii = vec![];
         let mut qual = vec![];
 
         let mut seq = Self::default();
 
-        let mut reader = needletail::parse_fastx_file(&path).unwrap();
-        while let Some(record) = reader.next() {
-            let seqrec = record.expect("Invalid FASTA/Q record");
-            ascii.extend_from_slice(&seqrec.seq());
-            qual.extend_from_slice(&seqrec.qual().unwrap());
+        let mut reader = helicase::FastxParser::<CONFIG>::from_file(path).unwrap();
+        while let Some(event) = reader.next() {
+            event.expect("Invalid FASTA/Q record");
+            ascii.extend_from_slice(reader.get_dna_string());
+            qual.extend_from_slice(reader.get_quality().expect("Expected FASTQ quality scores"));
             ascii.push(b'N');
             qual.push(0);
 
