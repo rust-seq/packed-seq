@@ -1,6 +1,6 @@
 #![cfg(feature = "file_io")]
 
-use packed_seq::{PackedSeqVec, Seq, SeqVec, pack_char};
+use packed_seq::{PackedNSeqVec, PackedSeqVec, Seq, SeqVec, pack_char};
 use std::{
     ops::Range,
     path::PathBuf,
@@ -91,6 +91,81 @@ fn fasta_ranges_preserve_many_records_across_input_buffers() {
 #[test]
 fn fastq_ranges_preserve_many_records_across_input_buffers() {
     check_many_records(true);
+}
+
+#[test]
+fn packed_n_fastx_preserves_ambiguity_and_record_separators() {
+    for (extension, contents) in [
+        ("fa", &b">first\r\nAcN\r\ngTR\r\n>second\r\nNYta"[..]),
+        (
+            "fq",
+            &b"@first\nAcNgTR\n+\nIIIIII\n@second\nNYta\n+\nIIII\n"[..],
+        ),
+    ] {
+        let input = Input::new(extension, contents);
+        let actual = PackedNSeqVec::from_fastx(&input.0);
+        let expected = PackedNSeqVec::from_ascii(b"AcNgTRNNYtaN");
+        assert_eq!(actual.seq.len(), expected.seq.len());
+        assert_eq!(actual.seq.into_raw(), expected.seq.into_raw());
+        assert_eq!(actual.ambiguous.into_raw(), expected.ambiguous.into_raw());
+    }
+}
+
+#[test]
+fn quality_mask_is_one_below_threshold() {
+    let bases = b"ACGTN".repeat(7);
+    // Phred 19, 20, 21, 0, 40: only 19 and 0 are below 20.
+    let quality = b"456!I".repeat(7);
+    let expected = [1, 0, 0, 1, 1].repeat(7);
+    let constructed = PackedNSeqVec::from_ascii_and_quality(&bases, &quality, 20);
+    let mut appended = PackedNSeqVec::default();
+    appended.push_from_ascii_and_quality(&bases, &quality, 20);
+    for packed in [constructed, appended] {
+        assert_eq!(
+            packed.ambiguous.as_slice().iter_bp().collect::<Vec<_>>(),
+            expected
+        );
+    }
+}
+
+#[test]
+fn packed_n_fastq_masks_low_quality_across_batches() {
+    let mut fastq = Vec::new();
+    let mut expected_ascii = Vec::new();
+    let mut expected_mask = Vec::new();
+    for i in 0..4000 {
+        let bases = &b"AcGTNRYtacg"[..1 + i % 11];
+        fastq.extend_from_slice(format!("@record-{i}\n").as_bytes());
+        fastq.extend_from_slice(bases);
+        fastq.extend_from_slice(b"\n+\n");
+        for (j, &base) in bases.iter().enumerate() {
+            // Phred 19, 20 and 21 straddle the threshold of 20.
+            let quality = b'!' + 19 + (j % 3) as u8;
+            fastq.push(quality);
+            expected_ascii.push(base);
+            expected_mask.push((!b"ACGTacgt".contains(&base) || quality < b'!' + 20) as u8);
+        }
+        fastq.push(b'\n');
+        expected_ascii.push(b'N');
+        expected_mask.push(1);
+    }
+    let input = Input::new("fq", &fastq);
+    let actual = PackedNSeqVec::from_fastq_with_quality(&input.0, 20);
+    assert_eq!(actual.seq.len(), expected_ascii.len());
+    assert_eq!(
+        actual.seq.into_raw(),
+        PackedSeqVec::from_ascii(&expected_ascii).into_raw()
+    );
+    assert_eq!(actual.ambiguous.len(), expected_mask.len());
+    for (i, (actual, expected)) in actual
+        .ambiguous
+        .as_slice()
+        .iter_bp()
+        .zip(expected_mask)
+        .enumerate()
+    {
+        assert_eq!(actual, expected, "ambiguity at base {i}");
+    }
 }
 
 fn check_many_records(fastq: bool) {
