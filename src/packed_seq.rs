@@ -1454,6 +1454,59 @@ impl PackedSeqVecBase<2> {
         let seq = PackedSeqVec::from_raw_parts(seq, len);
         (seq, ranges)
     }
+
+    /// Read a plain FASTA/FASTQ file using `num_threads` workers.
+    /// NOTE: This may return data out-of-order!
+    ///
+    /// Returns the sequence and record ranges in input order.
+    /// There may be padding between chunks; use the returned ranges to access records.
+    /// A thread count of zero disables multi-threading.
+    /// Compression formats without parallel decoding support are read sequentially.
+    #[cfg(feature = "file_io")]
+    pub fn from_fastx_parallel(
+        path: &std::path::Path,
+        num_threads: usize,
+    ) -> (Self, Vec<Range<usize>>) {
+        use helicase::HelicaseParser;
+
+        const CONFIG: helicase::Config = helicase::ParserOptions::default()
+            .ignore_headers()
+            .ignore_quality()
+            .dna_packed()
+            .reject_non_actg()
+            .config()
+            | helicase::config::advanced::MERGE_RECORDS;
+        let (len, seq, ranges) = helicase::ParallelFastxParser::<CONFIG>::from_file(path)
+            .unwrap()
+            .threads(num_threads)
+            .reduce(
+                |mut parser| {
+                    let mut ranges = Vec::new();
+                    let mut start = 0;
+                    while let Some(event) = parser.next() {
+                        event?;
+                        let end = parser.get_dna_packed().len();
+                        ranges.push(start..end);
+                        start = end;
+                    }
+                    let (len, mut seq) = parser.get_dna_packed_owned().into_packed_bytes();
+                    seq.truncate(len.div_ceil(Self::C8));
+                    Ok((len, seq, ranges))
+                },
+                |(_len, mut seq, mut ranges), (len2, seq2, ranges2)| {
+                    let offset = seq.len() * Self::C8;
+                    seq.extend(seq2);
+                    ranges.extend(
+                        ranges2
+                            .into_iter()
+                            .map(|r| offset + r.start..offset + r.end),
+                    );
+                    (offset + len2, seq, ranges)
+                },
+            )
+            .unwrap();
+        (PackedSeqVec::from_raw_parts(seq, len), ranges)
+    }
 }
 
 impl PackedSeqVecBase<1> {
