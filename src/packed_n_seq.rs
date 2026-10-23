@@ -185,38 +185,36 @@ impl PackedNSeqVec {
             .ignore_quality()
             .dna_string()
             .config();
+        let output = std::sync::Mutex::new(Self::default());
         helicase::ParallelFastxParser::<CONFIG>::from_file(path)
             .unwrap()
             .threads(num_threads)
-            .reduce(
-                |mut parser| {
-                    let mut seq = Self::default();
-                    let mut ascii = Vec::with_capacity(16000);
-                    while let Some(event) = parser.next() {
-                        event?;
-                        ascii.extend_from_slice(parser.get_dna_string());
-                        ascii.push(b'N');
-                        if ascii.len() >= 16000 {
-                            seq.push_ascii(&ascii);
-                            ascii.clear();
-                        }
-                    }
-                    if !ascii.is_empty() {
+            .for_each(|mut parser| {
+                let mut seq = Self::default();
+                let mut ascii = Vec::with_capacity(16000);
+                while let Some(event) = parser.next() {
+                    event?;
+                    ascii.extend_from_slice(parser.get_dna_string());
+                    ascii.push(b'N');
+                    if ascii.len() >= 16000 {
                         seq.push_ascii(&ascii);
+                        ascii.clear();
                     }
-                    Ok(seq)
-                },
-                |mut seq, chunk| {
-                    // Pad to a multiple of 8, so `seq` and `ambiguous` don't
-                    // have different internal paddings.
-                    let padding = (8 - seq.seq.len() % 8) % 8;
-                    seq.push_ascii(&b"NNNNNNN"[..padding]);
-                    seq.seq.push_seq(chunk.seq.as_slice());
-                    seq.ambiguous.push_seq(chunk.ambiguous.as_slice());
-                    seq
-                },
-            )
-            .unwrap()
+                }
+                if !ascii.is_empty() {
+                    seq.push_ascii(&ascii);
+                }
+                let mut output = output.lock().unwrap();
+                // Pad to a multiple of 8, so `seq` and `ambiguous` don't
+                // have different internal paddings.
+                let padding = (8 - output.seq.len() % 8) % 8;
+                output.push_ascii(&b"NNNNNNN"[..padding]);
+                output.seq.push_seq(seq.seq.as_slice());
+                output.ambiguous.push_seq(seq.ambiguous.as_slice());
+                Ok(())
+            })
+            .unwrap();
+        output.into_inner().unwrap()
     }
 
     /// Read a fasta/fastq file at the given path into a `PackedNSeq`, separating records with `N`.
@@ -276,41 +274,39 @@ impl PackedNSeqVec {
             .dna_string()
             .compute_quality()
             .config();
+        let output = std::sync::Mutex::new(Self::default());
         helicase::ParallelFastxParser::<CONFIG>::from_file(path)
             .unwrap()
             .threads(num_threads)
-            .reduce(
-                |mut parser| {
-                    let mut seq = Self::default();
-                    let mut ascii = Vec::with_capacity(16000);
-                    let mut quality = Vec::with_capacity(16000);
-                    while let Some(event) = parser.next() {
-                        event?;
-                        ascii.extend_from_slice(parser.get_dna_string());
-                        ascii.push(b'N');
-                        quality.extend_from_slice(
-                            parser.get_quality().expect("Expected FASTQ quality scores"),
-                        );
-                        quality.push(0);
-                        if ascii.len() >= 16000 {
-                            seq.push_from_ascii_and_quality(&ascii, &quality, min_qual);
-                            ascii.clear();
-                            quality.clear();
-                        }
-                    }
-                    if !ascii.is_empty() {
+            .for_each(|mut parser| {
+                let mut seq = Self::default();
+                let mut ascii = Vec::with_capacity(16000);
+                let mut quality = Vec::with_capacity(16000);
+                while let Some(event) = parser.next() {
+                    event?;
+                    ascii.extend_from_slice(parser.get_dna_string());
+                    ascii.push(b'N');
+                    quality.extend_from_slice(
+                        parser.get_quality().expect("Expected FASTQ quality scores"),
+                    );
+                    quality.push(0);
+                    if ascii.len() >= 16000 {
                         seq.push_from_ascii_and_quality(&ascii, &quality, min_qual);
+                        ascii.clear();
+                        quality.clear();
                     }
-                    Ok(seq)
-                },
-                |mut seq, chunk| {
-                    let padding = (8 - seq.seq.len() % 8) % 8;
-                    seq.push_ascii(&b"NNNNNNN"[..padding]);
-                    seq.seq.push_seq(chunk.seq.as_slice());
-                    seq.ambiguous.push_seq(chunk.ambiguous.as_slice());
-                    seq
-                },
-            )
-            .unwrap()
+                }
+                if !ascii.is_empty() {
+                    seq.push_from_ascii_and_quality(&ascii, &quality, min_qual);
+                }
+                let mut output = output.lock().unwrap();
+                let padding = (8 - output.seq.len() % 8) % 8;
+                output.push_ascii(&b"NNNNNNN"[..padding]);
+                output.seq.push_seq(seq.seq.as_slice());
+                output.ambiguous.push_seq(seq.ambiguous.as_slice());
+                Ok(())
+            })
+            .unwrap();
+        output.into_inner().unwrap()
     }
 }

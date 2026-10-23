@@ -1466,7 +1466,7 @@ impl PackedSeqVecBase<2> {
     /// Read a plain FASTA/FASTQ file using `num_threads` workers.
     /// NOTE: This may return data out-of-order!
     ///
-    /// Returns the sequence and record ranges in input order.
+    /// Returns the sequence and record ranges in chunk completion order.
     /// There may be padding between chunks; use the returned ranges to access records.
     /// A thread count of zero disables multi-threading.
     /// Compression formats without parallel decoding support are read sequentially.
@@ -1484,35 +1484,32 @@ impl PackedSeqVecBase<2> {
             .reject_non_actg()
             .config()
             | helicase::config::advanced::MERGE_RECORDS;
-        let (len, seq, ranges) = helicase::ParallelFastxParser::<CONFIG>::from_file(path)
+        let output = std::sync::Mutex::new((Vec::new(), Vec::new()));
+        helicase::ParallelFastxParser::<CONFIG>::from_file(path)
             .unwrap()
             .threads(num_threads)
-            .reduce(
-                |mut parser| {
-                    let mut ranges = Vec::new();
-                    let mut start = 0;
-                    while let Some(event) = parser.next() {
-                        event?;
-                        let end = parser.get_dna_packed().len();
-                        ranges.push(start..end);
-                        start = end;
-                    }
-                    let (len, mut seq) = parser.get_dna_packed_owned().into_packed_bytes();
-                    seq.truncate(len.div_ceil(Self::C8));
-                    Ok((len, seq, ranges))
-                },
-                |(_len, mut seq, mut ranges), (len2, seq2, ranges2)| {
-                    let offset = seq.len() * Self::C8;
-                    seq.extend(seq2);
-                    ranges.extend(
-                        ranges2
-                            .into_iter()
-                            .map(|r| offset + r.start..offset + r.end),
-                    );
-                    (offset + len2, seq, ranges)
-                },
-            )
+            .for_each(|mut parser| {
+                let mut ranges = Vec::new();
+                let mut start = 0;
+                while let Some(event) = parser.next() {
+                    event?;
+                    let end = parser.get_dna_packed().len();
+                    ranges.push(start..end);
+                    start = end;
+                }
+                let (len, mut seq) = parser.get_dna_packed_owned().into_packed_bytes();
+                seq.truncate(len.div_ceil(Self::C8));
+                let mut output = output.lock().unwrap();
+                let offset = output.0.len() * Self::C8;
+                output.0.extend(seq);
+                output
+                    .1
+                    .extend(ranges.into_iter().map(|r| offset + r.start..offset + r.end));
+                Ok(())
+            })
             .unwrap();
+        let (seq, ranges) = output.into_inner().unwrap();
+        let len = seq.len() * Self::C8;
         (PackedSeqVec::from_raw_parts(seq, len), ranges)
     }
 }
