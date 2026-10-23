@@ -3,6 +3,8 @@
 <!-- next-header -->
 
 ## git
+
+## 5.1.0
 New:
 - Add `PackedSeqVec::from_fastx` to read a fasta file into a single string with
   ranges pointing into the string, alongside existing `PackedNSeq::from_fastx`.
