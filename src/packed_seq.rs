@@ -1412,10 +1412,7 @@ where
     }
 }
 
-impl<const B: usize> PackedSeqVecBase<B>
-where
-    Bits<B>: SupportedBits,
-{
+impl PackedSeqVecBase<2> {
     /// Creates a `SeqVec` from a vector of packed bytes and a length in bp.
     ///
     /// The vector should have at least 48 bytes of padding after `len`.
@@ -1428,17 +1425,33 @@ where
 
     /// Read a fasta/fastq file at the given path into a `PackedSeq`.
     /// Returns the sequence as well as the slices of all records.
+    ///
+    /// Currently, all slices are bit-packed, without any padding.
     #[cfg(feature = "file_io")]
     pub fn from_fastx(path: &std::path::Path) -> (Self, Vec<Range<usize>>) {
-        let mut seq = Self::default();
+        use helicase::{HelicaseParser, input::FromFile};
+
         let mut ranges = vec![];
 
-        let mut reader = needletail::parse_fastx_file(&path).unwrap();
-        while let Some(record) = reader.next() {
-            let seqrec = record.expect("Invalid FASTA/Q record");
-            ranges.push(seq.push_ascii(&seqrec.seq()));
-        }
+        const CONFIG: helicase::Config = helicase::ParserOptions::default()
+            .ignore_headers()
+            .ignore_quality()
+            .dna_packed()
+            .reject_non_actg()
+            .config()
+            | helicase::config::advanced::MERGE_RECORDS;
+        let mut parser = helicase::FastxParser::<CONFIG>::from_file(&path).unwrap();
 
+        let mut start = 0;
+        while let Some(event) = parser.next() {
+            event.unwrap();
+            let end = parser.get_dna_packed().len();
+            ranges.push(start..end);
+            start = end;
+        }
+        let (len, seq) = parser.get_dna_packed_owned().into_packed_bytes();
+
+        let seq = PackedSeqVec::from_raw_parts(seq, len);
         (seq, ranges)
     }
 }
