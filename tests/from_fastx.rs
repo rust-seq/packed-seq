@@ -216,3 +216,102 @@ fn check_many_records(fastq: bool) {
     let records: Vec<&[u8]> = records.iter().map(Vec::as_slice).collect();
     check(&input, &records, &ranges);
 }
+
+#[test]
+fn multithreaded_fasta_collects_all_records() {
+    check_multithreaded(false);
+}
+
+#[test]
+fn multithreaded_fastq_collects_all_records_and_quality_masks() {
+    check_multithreaded(true);
+}
+
+fn check_multithreaded(fastq: bool) {
+    let mut contents = Vec::new();
+    let mut expected = Vec::new();
+    let mut expected_quality = Vec::new();
+    for i in 0..2048usize {
+        // A unique prefix detects missing or duplicated records, independent of order.
+        let mut bases: Vec<_> = (0..8).map(|j| b"ACTG"[(i >> (2 * j)) & 3]).collect();
+        bases.extend((0..(65 + i % 13)).map(|j| b"ACGT"[(i + j) % 4]));
+        contents
+            .extend_from_slice(format!("{}record-{i}\n", if fastq { '@' } else { '>' }).as_bytes());
+        contents.extend_from_slice(&bases);
+        contents.push(b'\n');
+        // Keep G high-quality so (packed G, ambiguous) uniquely denotes separator N.
+        let quality: Vec<_> = bases
+            .iter()
+            .enumerate()
+            .map(|(j, &base)| {
+                if j % 3 == 0 && base != b'G' {
+                    b'4'
+                } else {
+                    b'5'
+                }
+            })
+            .collect();
+        if fastq {
+            contents.extend_from_slice(b"+\n");
+            contents.extend_from_slice(&quality);
+            contents.push(b'\n');
+        }
+        expected.push(bases.iter().copied().map(pack_char).collect::<Vec<_>>());
+        expected_quality.push(
+            bases
+                .iter()
+                .zip(&quality)
+                .map(|(&base, &q)| (pack_char(base), (q < b'5') as u8))
+                .collect::<Vec<_>>(),
+        );
+    }
+    expected.sort();
+    expected_quality.sort();
+    let input = Input::new(if fastq { "fq" } else { "fa" }, &contents);
+    for threads in [2, 4] {
+        let (packed, ranges) = PackedSeqVec::from_fastx_parallel(&input.0, threads);
+        let mut previous_end = 0;
+        let mut records = Vec::new();
+        for range in ranges {
+            assert!(range.start >= previous_end);
+            assert!(range.start - previous_end < 4);
+            assert!(range.end <= packed.len());
+            previous_end = range.end;
+            records.push(packed.slice(range).iter_bp().collect::<Vec<_>>());
+        }
+        assert!(packed.len() - previous_end < 4);
+        records.sort();
+        assert_eq!(records, expected);
+
+        let plain = PackedNSeqVec::from_fastx_parallel(&input.0, threads);
+        let records = split_parallel_n_records(&plain);
+        let expected_plain: Vec<_> = expected
+            .iter()
+            .map(|record| record.iter().map(|&base| (base, 0)).collect::<Vec<_>>())
+            .collect();
+        assert_eq!(records, expected_plain);
+        if fastq {
+            let masked = PackedNSeqVec::from_fastq_with_quality_parallel(&input.0, 20, threads);
+            assert_eq!(split_parallel_n_records(&masked), expected_quality);
+        }
+    }
+}
+
+fn split_parallel_n_records(packed: &PackedNSeqVec) -> Vec<Vec<(u8, u8)>> {
+    assert_eq!(packed.seq.len(), packed.ambiguous.len());
+    let bases: Vec<_> = packed
+        .seq
+        .as_slice()
+        .iter_bp()
+        .zip(packed.ambiguous.as_slice().iter_bp())
+        .collect();
+    let separator = (pack_char(b'G'), 1);
+    assert_eq!(bases.last(), Some(&separator));
+    let mut records: Vec<_> = bases
+        .split(|&base| base == separator)
+        .filter(|record| !record.is_empty())
+        .map(<[_]>::to_vec)
+        .collect();
+    records.sort();
+    records
+}
