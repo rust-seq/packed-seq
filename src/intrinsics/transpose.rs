@@ -68,25 +68,25 @@ fn _transpose(m: [S; 8]) -> [S; 8] {
         use core::mem::transmute;
 
         let m: [u32x4; 16] = transmute(m);
-        let t11 = transpose_4x4_neon(
+        let t11 = transpose_4x4(
             *m.get_unchecked(0),
             *m.get_unchecked(2),
             *m.get_unchecked(4),
             *m.get_unchecked(6),
         );
-        let t21 = transpose_4x4_neon(
+        let t21 = transpose_4x4(
             *m.get_unchecked(1),
             *m.get_unchecked(3),
             *m.get_unchecked(5),
             *m.get_unchecked(7),
         );
-        let t12 = transpose_4x4_neon(
+        let t12 = transpose_4x4(
             *m.get_unchecked(8),
             *m.get_unchecked(10),
             *m.get_unchecked(12),
             *m.get_unchecked(14),
         );
-        let t22 = transpose_4x4_neon(
+        let t22 = transpose_4x4(
             *m.get_unchecked(9),
             *m.get_unchecked(11),
             *m.get_unchecked(13),
@@ -116,7 +116,7 @@ fn _transpose(m: [S; 8]) -> [S; 8] {
 
 #[inline(always)]
 #[cfg(target_feature = "neon")]
-fn transpose_4x4_neon(m0: u32x4, m1: u32x4, m2: u32x4, m3: u32x4) -> [u32x4; 4] {
+fn transpose_4x4(m0: u32x4, m1: u32x4, m2: u32x4, m3: u32x4) -> [u32x4; 4] {
     unsafe {
         use core::arch::aarch64::vzipq_u32;
         use core::mem::transmute;
