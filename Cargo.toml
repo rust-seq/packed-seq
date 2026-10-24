@@ -28,7 +28,7 @@ helicase = { version = "1.0.0", features = ["bz2"], optional = true }
 
 [features]
 # Also needed for tests.
-default = ["rand", "file_io"]
+default = ["rand"]
 
 # Enables functions to read PackedNSeq directly from a file.
 file_io = ["helicase" ]
