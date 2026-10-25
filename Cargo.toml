@@ -18,11 +18,11 @@ ensure_simd = "0.1.0"
 # Optional generate random sequences for testing. (Default enabled.)
 rand = { version = "0.10", optional = true }
 # Optional (de)serialization using epserde.
-epserde = { version = "0.12", optional = true }
+epserde = { version = "0.13", optional = true }
 # Optional pyclass atrributes for some objects.
-pyo3 = { version = "0.25", features = ["extension-module"], optional = true }
+pyo3 = { version = "0.30", features = ["extension-module"], optional = true }
 # Optional, for PackedEfNSeqVec
-sux = { version = "0.14", optional = true }
+sux = { version = "0.15", optional = true }
 # Optional, for reading PackedSeq[N]Vec directly from a file
 helicase = { version = "1.0.0", features = ["bz2"], optional = true }
 

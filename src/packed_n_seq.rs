@@ -5,7 +5,7 @@ use crate::packed_seq::read_slice_32;
 use super::*;
 
 #[derive(Clone, Copy, Debug, MemSize, MemDbg)]
-#[cfg_attr(feature = "pyo3", pyo3::pyclass)]
+// #[cfg_attr(feature = "pyo3", pyo3::pyclass)] // Not supported: pyclass cannot have lifetime parameters
 pub struct PackedNSeq<'s> {
     pub seq: PackedSeq<'s>,
     pub ambiguous: BitSeq<'s>,
