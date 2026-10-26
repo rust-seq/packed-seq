@@ -3,6 +3,8 @@
 <!-- next-header -->
 
 ## git
+- Make the `file_io` non-default again.
+- Support for wasm/simd128.
 
 ## 5.1.0
 New:
