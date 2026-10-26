@@ -105,6 +105,8 @@
 //! - `epserde` enables `derive(epserde::Epserde)` for `PackedSeqVec` and `AsciiSeqVec`, and adds its `SerializeInner` and `DeserializeInner` traits to `SeqVec`.
 //! - `pyo3` enables `derive(pyo3::pyclass)` for `PackedSeqVec` and `AsciiSeqVec`.
 
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 /// Functions with architecture-specific implementations.
 pub mod intrinsics {
     mod transpose;

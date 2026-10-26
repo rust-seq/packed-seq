@@ -31,7 +31,7 @@ helicase = { version = "1.0.0", features = ["bz2"], optional = true }
 default = ["rand"]
 
 # Enables functions to read PackedNSeq directly from a file.
-file_io = ["helicase" ]
+file_io = ["helicase"]
 
 # Enables PackedEfNSeq
 ef_seq = ["sux"]
@@ -46,3 +46,4 @@ scalar = ["ensure_simd/scalar"]
 [package.metadata.docs.rs]
 # Features to pass to Cargo
 features = ['rand', 'file_io', 'ef_seq']
+rustdoc-args = ["--cfg", "docsrs"]
