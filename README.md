@@ -45,6 +45,12 @@ let seq = b"ACTGCAGCGCATATGTAGT";
 let ascii_seq = AsciiSeqVec::from_ascii(seq);
 // Packed DNA sequence.
 let packed_seq = PackedSeqVec::from_ascii(seq);
+// Or with the `file_io` feature, read a full Fasta file into a single allocation:
+let (_packed_seq, ranges) = PackedSeqVec::from_fastx(std::path::Path::new("path.fasta"));
+// Or, read into a `PackedNSeq` that explicitly stores the positions of ambiguous characters.
+// Records are separated by an `N`.
+let nseq = PackedSeqVec::from_fastx(std::path::Path::new("path.fasta"));
+
 assert_eq!(ascii_seq.len(), packed_seq.len());
 // Iterate the ASCII characters.
 let characters: Vec<u8> = seq.iter_bp().collect();

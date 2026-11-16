@@ -67,6 +67,16 @@
 //! // Packed DNA sequence.
 //! let packed_seq = PackedSeqVec::from_ascii(seq);
 //! assert_eq!(ascii_seq.len(), packed_seq.len());
+//!
+//! # #[cfg(feature = "file_io")]
+//! # let read_fasta = || {
+//! // Or with the `file_io` feature, read a full Fasta file into a single allocation:
+//! let (_packed_seq, ranges) = PackedSeqVec::from_fastx(std::path::Path::new("path.fasta"));
+//! // Or, read into a `PackedNSeq` that explicitly stores the positions of ambiguous characters.
+//! // Records are separated by an `N`.
+//! let nseq = packed_seq::PackedNSeqVec::from_fastx(std::path::Path::new("path.fasta"));
+//! # };
+//!
 //! // Iterate the ASCII characters.
 //! let characters: Vec<u8> = seq.iter_bp().collect();
 //! assert_eq!(characters, seq);
@@ -102,6 +112,7 @@
 //! ```
 //!
 //! ## Feature flags
+//! - `file_io`: add [`PackedSeqVec::from_fastx`] and [`PackedNSeqVec::from_fastx`] that read a fasta file into a single allocation using `helicase`.
 //! - `epserde` enables `derive(epserde::Epserde)` for `PackedSeqVec` and `AsciiSeqVec`, and adds its `SerializeInner` and `DeserializeInner` traits to `SeqVec`.
 //! - `pyo3` enables `derive(pyo3::pyclass)` for `PackedSeqVec` and `AsciiSeqVec`.
 
